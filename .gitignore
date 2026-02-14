@@ -1,0 +1,10 @@
+bin/
+obj/
+*.user
+*.suo
+.vs/
+*.swp
+*~
+.DS_Store
+*.docx
+!examples/*.docx

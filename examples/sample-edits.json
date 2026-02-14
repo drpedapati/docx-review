@@ -1,0 +1,34 @@
+{
+  "author": "Dr. Smith",
+  "changes": [
+    {
+      "type": "replace",
+      "find": "old text that should be replaced",
+      "replace": "new improved text"
+    },
+    {
+      "type": "delete",
+      "find": "unnecessary phrase to remove"
+    },
+    {
+      "type": "insert_after",
+      "anchor": "end of this sentence.",
+      "text": " This additional context was added by the reviewer."
+    },
+    {
+      "type": "insert_before",
+      "anchor": "Important finding:",
+      "text": "Note: "
+    }
+  ],
+  "comments": [
+    {
+      "anchor": "text that needs a comment",
+      "text": "Consider rephrasing this for clarity."
+    },
+    {
+      "anchor": "methodology section",
+      "text": "Please add sample size justification."
+    }
+  ]
+}
