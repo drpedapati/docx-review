@@ -89,12 +89,11 @@ class Program
             outputPath = Path.Combine(dir, $"{name}_reviewed.docx");
         }
 
-        // Deserialize manifest
+        // Deserialize manifest (using source-generated context for trim/AOT safety)
         EditManifest manifest;
         try
         {
-            manifest = JsonSerializer.Deserialize<EditManifest>(manifestJson,
-                new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
+            manifest = JsonSerializer.Deserialize(manifestJson, DocxReviewJsonContext.Default.EditManifest)
                 ?? throw new Exception("Manifest deserialized to null");
         }
         catch (Exception ex)
@@ -123,8 +122,7 @@ class Program
         // Output
         if (jsonOutput)
         {
-            var jsonOpts = new JsonSerializerOptions { WriteIndented = true };
-            Console.WriteLine(JsonSerializer.Serialize(result, jsonOpts));
+            Console.WriteLine(JsonSerializer.Serialize(result, DocxReviewJsonContext.Default.ProcessingResult));
         }
         else
         {

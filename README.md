@@ -2,6 +2,8 @@
 
 A CLI tool that adds **tracked changes** and **comments** to Word (.docx) documents using Microsoft's [Open XML SDK](https://github.com/dotnet/Open-XML-SDK). Takes a `.docx` file and a JSON edit manifest, produces a reviewed document with proper `w:del`/`w:ins` markup and comment anchors that render natively in Microsoft Word — no macros, no compatibility issues.
 
+**Ships as a single 12MB native binary.** No runtime, no Docker required.
+
 ## Why Open XML SDK?
 
 We evaluated three approaches for programmatic document review:
@@ -9,41 +11,47 @@ We evaluated three approaches for programmatic document review:
 | Approach | Tracked Changes | Comments | Formatting |
 |----------|:-:|:-:|:-:|
 | **Open XML SDK (.NET)** | ✅ 100% | ✅ 100% | ✅ Preserved |
-| python-docx (Python) | ✅ 100% | ⚠️ ~80% | ✅ Preserved |
+| python-docx / docx-editor | ✅ 100% | ⚠️ ~80% | ✅ Preserved |
 | pandoc + Lua filters | ❌ Lossy | ❌ Limited | ⚠️ Degraded |
 
 Open XML SDK is the gold standard — it's Microsoft's own library for manipulating Office documents. Comments anchor correctly 100% of the time, tracked changes use proper revision markup, and formatting is always preserved.
 
 ## Quick Start
 
-### Build
+### Option 1: Native Binary (recommended)
 
 ```bash
 git clone https://github.com/henrybloomingdale/docx-review.git
 cd docx-review
-docker build -t docx-review .
+make install    # Builds + installs to /usr/local/bin
 ```
 
-### Run
+Requires [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0) for building (`brew install dotnet@8`). The resulting binary is self-contained — no .NET runtime needed to run it.
+
+### Option 2: Docker
+
+```bash
+make docker     # Builds Docker image
+docker run --rm -v "$(pwd):/work" -w /work docx-review input.docx edits.json -o reviewed.docx
+```
+
+### Usage
 
 ```bash
 # Basic usage
-docker run --rm -v "$(pwd):/work" -w /work docx-review input.docx edits.json -o reviewed.docx
-
-# Or use the shell wrapper (after adding to PATH)
-./docx-review input.docx edits.json -o reviewed.docx
+docx-review input.docx edits.json -o reviewed.docx
 
 # Pipe JSON from stdin
-cat edits.json | ./docx-review input.docx -o reviewed.docx
+cat edits.json | docx-review input.docx -o reviewed.docx
 
 # Custom author name
-./docx-review input.docx edits.json -o reviewed.docx --author "Dr. Smith"
+docx-review input.docx edits.json -o reviewed.docx --author "Dr. Smith"
 
 # Dry run (validate without modifying)
-./docx-review input.docx edits.json --dry-run
+docx-review input.docx edits.json --dry-run
 
-# JSON output for programmatic use
-./docx-review input.docx edits.json -o reviewed.docx --json
+# JSON output for pipelines
+docx-review input.docx edits.json -o reviewed.docx --json
 ```
 
 ## JSON Manifest Format
@@ -106,6 +114,18 @@ Each comment needs:
 | `--dry-run` | Validate the manifest without modifying the document |
 | `-h`, `--help` | Show help |
 
+## Build Targets
+
+```
+make              # Build native binary for current platform (12MB, self-contained)
+make install      # Build + install to /usr/local/bin
+make all          # Cross-compile for macOS ARM64, macOS x64, Linux x64
+make docker       # Build Docker image
+make test         # Run test (requires TEST_DOC=path/to/doc.docx)
+make clean        # Remove build artifacts
+make help         # Show all targets
+```
+
 ## Exit Codes
 
 - `0` — All changes and comments applied successfully
@@ -144,15 +164,18 @@ With `--json`, the tool outputs structured results:
 
 ## Development
 
-Built with .NET 8 and packaged as a Docker container for zero-dependency usage.
-
 ```bash
-# Build locally (requires .NET 8 SDK)
-dotnet build
+# Build native binary (requires .NET 8 SDK)
+make build
+
+# Build and run locally
 dotnet run -- input.docx edits.json -o reviewed.docx
 
-# Build Docker image
-docker build -t docx-review .
+# Cross-compile all platforms
+make all
+# → build/osx-arm64/docx-review  (macOS Apple Silicon)
+# → build/osx-x64/docx-review    (macOS Intel)
+# → build/linux-x64/docx-review  (Linux)
 ```
 
 ## License

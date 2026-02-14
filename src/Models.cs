@@ -1,7 +1,19 @@
+using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Collections.Generic;
 
 namespace DocxReview;
+
+/// <summary>
+/// JSON source generator context for trim-safe / AOT-compatible serialization.
+/// </summary>
+[JsonSerializable(typeof(EditManifest))]
+[JsonSerializable(typeof(ProcessingResult))]
+[JsonSourceGenerationOptions(
+    PropertyNameCaseInsensitive = true,
+    WriteIndented = true
+)]
+public partial class DocxReviewJsonContext : JsonSerializerContext { }
 
 /// <summary>
 /// Root manifest model deserialized from the JSON input.

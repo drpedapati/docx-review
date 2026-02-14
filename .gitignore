@@ -8,3 +8,6 @@ obj/
 .DS_Store
 *.docx
 !examples/*.docx
+build/
+bin/
+obj/
