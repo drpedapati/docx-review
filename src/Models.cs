@@ -10,6 +10,7 @@ namespace DocxReview;
 [JsonSerializable(typeof(EditManifest))]
 [JsonSerializable(typeof(ProcessingResult))]
 [JsonSerializable(typeof(ReadResult))]
+[JsonSerializable(typeof(DiffResult))]
 [JsonSourceGenerationOptions(
     PropertyNameCaseInsensitive = true,
     WriteIndented = true
