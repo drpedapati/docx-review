@@ -9,6 +9,7 @@ namespace DocxReview;
 /// </summary>
 [JsonSerializable(typeof(EditManifest))]
 [JsonSerializable(typeof(ProcessingResult))]
+[JsonSerializable(typeof(ReadResult))]
 [JsonSourceGenerationOptions(
     PropertyNameCaseInsensitive = true,
     WriteIndented = true
@@ -112,4 +113,144 @@ public class ProcessingResult
 
     [JsonPropertyName("success")]
     public bool Success { get; set; }
+}
+
+// ── Read-mode models ──────────────────────────────────────────────
+
+/// <summary>
+/// Top-level result for --read mode.
+/// </summary>
+public class ReadResult
+{
+    [JsonPropertyName("file")]
+    public string File { get; set; } = "";
+
+    [JsonPropertyName("paragraphs")]
+    public List<ParagraphInfo> Paragraphs { get; set; } = new();
+
+    [JsonPropertyName("comments")]
+    public List<CommentInfo> Comments { get; set; } = new();
+
+    [JsonPropertyName("metadata")]
+    public DocumentMetadata Metadata { get; set; } = new();
+
+    [JsonPropertyName("summary")]
+    public ReadSummary Summary { get; set; } = new();
+}
+
+/// <summary>
+/// A single paragraph with its text, style, and tracked changes.
+/// </summary>
+public class ParagraphInfo
+{
+    [JsonPropertyName("index")]
+    public int Index { get; set; }
+
+    [JsonPropertyName("style")]
+    public string? Style { get; set; }
+
+    [JsonPropertyName("text")]
+    public string Text { get; set; } = "";
+
+    [JsonPropertyName("tracked_changes")]
+    public List<TrackedChangeInfo> TrackedChanges { get; set; } = new();
+}
+
+/// <summary>
+/// An individual tracked change (insertion or deletion).
+/// </summary>
+public class TrackedChangeInfo
+{
+    [JsonPropertyName("type")]
+    public string Type { get; set; } = "";
+
+    [JsonPropertyName("text")]
+    public string Text { get; set; } = "";
+
+    [JsonPropertyName("author")]
+    public string Author { get; set; } = "";
+
+    [JsonPropertyName("date")]
+    public string? Date { get; set; }
+
+    [JsonPropertyName("id")]
+    public string Id { get; set; } = "";
+}
+
+/// <summary>
+/// A comment extracted from the document.
+/// </summary>
+public class CommentInfo
+{
+    [JsonPropertyName("id")]
+    public string Id { get; set; } = "";
+
+    [JsonPropertyName("author")]
+    public string Author { get; set; } = "";
+
+    [JsonPropertyName("date")]
+    public string? Date { get; set; }
+
+    [JsonPropertyName("anchor_text")]
+    public string AnchorText { get; set; } = "";
+
+    [JsonPropertyName("text")]
+    public string Text { get; set; } = "";
+
+    [JsonPropertyName("paragraph_index")]
+    public int ParagraphIndex { get; set; }
+}
+
+/// <summary>
+/// Document metadata from core properties.
+/// </summary>
+public class DocumentMetadata
+{
+    [JsonPropertyName("title")]
+    public string? Title { get; set; }
+
+    [JsonPropertyName("author")]
+    public string? Author { get; set; }
+
+    [JsonPropertyName("last_modified_by")]
+    public string? LastModifiedBy { get; set; }
+
+    [JsonPropertyName("created")]
+    public string? Created { get; set; }
+
+    [JsonPropertyName("modified")]
+    public string? Modified { get; set; }
+
+    [JsonPropertyName("revision")]
+    public int? Revision { get; set; }
+
+    [JsonPropertyName("word_count")]
+    public int WordCount { get; set; }
+
+    [JsonPropertyName("paragraph_count")]
+    public int ParagraphCount { get; set; }
+}
+
+/// <summary>
+/// Aggregated summary statistics for --read mode.
+/// </summary>
+public class ReadSummary
+{
+    [JsonPropertyName("total_tracked_changes")]
+    public int TotalTrackedChanges { get; set; }
+
+    [JsonPropertyName("insertions")]
+    public int Insertions { get; set; }
+
+    [JsonPropertyName("deletions")]
+    public int Deletions { get; set; }
+
+    [JsonPropertyName("total_comments")]
+    public int TotalComments { get; set; }
+
+    [JsonPropertyName("change_authors")]
+    public List<string> ChangeAuthors { get; set; } = new();
+
+    [JsonPropertyName("comment_authors")]
+    public List<string> CommentAuthors { get; set; } = new();
 }

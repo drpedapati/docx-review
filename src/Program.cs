@@ -14,6 +14,7 @@ class Program
         string? author = null;
         bool jsonOutput = false;
         bool dryRun = false;
+        bool readMode = false;
         bool showHelp = false;
         bool showVersion = false;
 
@@ -37,6 +38,9 @@ class Program
                     break;
                 case "--dry-run":
                     dryRun = true;
+                    break;
+                case "--read":
+                    readMode = true;
                     break;
                 case "-h":
                 case "--help":
@@ -64,6 +68,39 @@ class Program
             return showHelp ? 0 : 1;
         }
 
+        // Validate input file
+        if (!File.Exists(inputPath))
+        {
+            Error($"Input file not found: {inputPath}");
+            return 1;
+        }
+
+        // ── Read mode ─────────────────────────────────────────────
+        if (readMode)
+        {
+            try
+            {
+                var reader = new DocumentReader();
+                var readResult = reader.Read(inputPath);
+
+                if (jsonOutput)
+                {
+                    Console.WriteLine(JsonSerializer.Serialize(readResult, DocxReviewJsonContext.Default.ReadResult));
+                }
+                else
+                {
+                    DocumentReader.PrintHumanReadable(readResult);
+                }
+                return 0;
+            }
+            catch (Exception ex)
+            {
+                Error($"Read failed: {ex.Message}");
+                return 1;
+            }
+        }
+
+        // ── Edit mode (original behavior) ─────────────────────────
         // Read manifest from file or stdin
         string manifestJson;
         if (manifestPath != null)
@@ -83,13 +120,6 @@ class Program
         else
         {
             manifestJson = Console.In.ReadToEnd();
-        }
-
-        // Validate input file
-        if (!File.Exists(inputPath))
-        {
-            Error($"Input file not found: {inputPath}");
-            return 1;
         }
 
         // Default output path
@@ -145,13 +175,15 @@ class Program
 
     static void PrintUsage()
     {
-        Console.Error.WriteLine(@"docx-review — Add tracked changes and comments to Word documents
+        Console.Error.WriteLine(@"docx-review — Read and write tracked changes and comments in Word documents
 
 Usage:
-  docx-review <input.docx> <edits.json> [options]
+  docx-review <input.docx> --read [--json]         Read review state from a document
+  docx-review <input.docx> <edits.json> [options]  Write tracked changes/comments
   cat edits.json | docx-review <input.docx> [options]
 
 Options:
+  --read                 Read mode: extract tracked changes, comments, and metadata
   -o, --output <path>    Output file path (default: <input>_reviewed.docx)
   --author <name>        Reviewer name (overrides manifest author)
   --json                 Output results as JSON
