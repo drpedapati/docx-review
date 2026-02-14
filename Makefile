@@ -12,7 +12,7 @@
 BINARY_NAME  := docx-review
 VERSION      := 1.0.0
 BUILD_DIR    := build
-INSTALL_DIR  := /opt/homebrew/bin
+INSTALL_DIR  := /usr/local/bin
 
 # Detect current platform
 UNAME_S := $(shell uname -s)
@@ -66,7 +66,7 @@ uninstall:
 all:
 	@echo "Building for all platforms..."
 	@mkdir -p $(BUILD_DIR)
-	@for rid in osx-arm64 osx-x64 linux-x64; do \
+	@for rid in osx-arm64 osx-x64 linux-x64 linux-arm64; do \
 		echo ""; \
 		echo "→ Building for $$rid..."; \
 		dotnet publish $(PUBLISH_FLAGS) -r $$rid -o $(BUILD_DIR)/$$rid; \
@@ -74,7 +74,7 @@ all:
 	done
 	@echo ""
 	@echo "All builds complete:"
-	@ls -lh $(BUILD_DIR)/osx-arm64/$(BINARY_NAME) $(BUILD_DIR)/osx-x64/$(BINARY_NAME) $(BUILD_DIR)/linux-x64/$(BINARY_NAME) 2>/dev/null
+	@ls -lh $(BUILD_DIR)/osx-arm64/$(BINARY_NAME) $(BUILD_DIR)/osx-x64/$(BINARY_NAME) $(BUILD_DIR)/linux-x64/$(BINARY_NAME) $(BUILD_DIR)/linux-arm64/$(BINARY_NAME) 2>/dev/null
 
 ## docker: Build Docker image
 docker:

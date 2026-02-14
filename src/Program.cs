@@ -15,11 +15,16 @@ class Program
         bool jsonOutput = false;
         bool dryRun = false;
         bool showHelp = false;
+        bool showVersion = false;
 
         for (int i = 0; i < args.Length; i++)
         {
             switch (args[i])
             {
+                case "-v":
+                case "--version":
+                    showVersion = true;
+                    break;
                 case "-o":
                 case "--output":
                     if (i + 1 < args.Length) outputPath = args[++i];
@@ -45,6 +50,12 @@ class Program
                     }
                     break;
             }
+        }
+
+        if (showVersion)
+        {
+            Console.WriteLine($"docx-review {GetVersion()}");
+            return 0;
         }
 
         if (showHelp || inputPath == null)
@@ -186,6 +197,13 @@ JSON Manifest Format:
             Console.WriteLine(dryRun ? "✅ All edits would succeed" : "✅ All edits applied successfully");
         else
             Console.WriteLine("⚠️  Some edits failed (see above)");
+    }
+
+    static string GetVersion()
+    {
+        var asm = System.Reflection.Assembly.GetExecutingAssembly();
+        var ver = asm.GetName().Version;
+        return ver != null ? $"{ver.Major}.{ver.Minor}.{ver.Build}" : "1.0.0";
     }
 
     static void Error(string msg) => Console.Error.WriteLine($"Error: {msg}");
