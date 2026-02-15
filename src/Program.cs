@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Text.Json;
 using DocxReview;
@@ -15,8 +16,12 @@ class Program
         bool jsonOutput = false;
         bool dryRun = false;
         bool readMode = false;
+        bool diffMode = false;
+        bool textConvMode = false;
+        bool gitSetup = false;
         bool showHelp = false;
         bool showVersion = false;
+        var positionalArgs = new List<string>();
 
         for (int i = 0; i < args.Length; i++)
         {
@@ -42,19 +47,29 @@ class Program
                 case "--read":
                     readMode = true;
                     break;
+                case "--diff":
+                    diffMode = true;
+                    break;
+                case "--textconv":
+                    textConvMode = true;
+                    break;
+                case "--git-setup":
+                    gitSetup = true;
+                    break;
                 case "-h":
                 case "--help":
                     showHelp = true;
                     break;
                 default:
                     if (!args[i].StartsWith("-"))
-                    {
-                        if (inputPath == null) inputPath = args[i];
-                        else if (manifestPath == null) manifestPath = args[i];
-                    }
+                        positionalArgs.Add(args[i]);
                     break;
             }
         }
+
+        // Map positional args
+        if (positionalArgs.Count >= 1) inputPath = positionalArgs[0];
+        if (positionalArgs.Count >= 2) manifestPath = positionalArgs[1];
 
         if (showVersion)
         {
@@ -62,10 +77,82 @@ class Program
             return 0;
         }
 
-        if (showHelp || inputPath == null)
+        // ── Git setup ──────────────────────────────────────────────
+        if (gitSetup)
+        {
+            PrintGitSetup();
+            return 0;
+        }
+
+        if (showHelp || (inputPath == null && !gitSetup))
         {
             PrintUsage();
             return showHelp ? 0 : 1;
+        }
+
+        // ── Diff mode ─────────────────────────────────────────────
+        if (diffMode)
+        {
+            if (manifestPath == null)
+            {
+                Error("--diff requires two files: docx-review --diff old.docx new.docx");
+                return 1;
+            }
+
+            if (!File.Exists(inputPath!))
+            {
+                Error($"Old file not found: {inputPath}");
+                return 1;
+            }
+            if (!File.Exists(manifestPath))
+            {
+                Error($"New file not found: {manifestPath}");
+                return 1;
+            }
+
+            try
+            {
+                var oldDoc = DocumentExtractor.Extract(inputPath!);
+                var newDoc = DocumentExtractor.Extract(manifestPath);
+                var diffResult = DocumentDiffer.Diff(oldDoc, newDoc);
+
+                if (jsonOutput)
+                {
+                    Console.WriteLine(JsonSerializer.Serialize(diffResult, DocxReviewJsonContext.Default.DiffResult));
+                }
+                else
+                {
+                    DocumentDiffer.PrintHumanReadable(diffResult);
+                }
+                return 0;
+            }
+            catch (Exception ex)
+            {
+                Error($"Diff failed: {ex.Message}");
+                return 1;
+            }
+        }
+
+        // ── TextConv mode ─────────────────────────────────────────
+        if (textConvMode)
+        {
+            if (!File.Exists(inputPath!))
+            {
+                Error($"File not found: {inputPath}");
+                return 1;
+            }
+
+            try
+            {
+                var extraction = DocumentExtractor.Extract(inputPath!);
+                Console.Write(TextConv.Convert(extraction));
+                return 0;
+            }
+            catch (Exception ex)
+            {
+                Error($"TextConv failed: {ex.Message}");
+                return 1;
+            }
         }
 
         // Validate input file
@@ -175,19 +262,28 @@ class Program
 
     static void PrintUsage()
     {
-        Console.Error.WriteLine(@"docx-review — Read and write tracked changes and comments in Word documents
+        Console.Error.WriteLine(@"docx-review — Read, write, and diff Word documents with full revision awareness
 
 Usage:
-  docx-review <input.docx> --read [--json]         Read review state from a document
-  docx-review <input.docx> <edits.json> [options]  Write tracked changes/comments
+  docx-review <input.docx> --read [--json]              Read review state
+  docx-review <input.docx> <edits.json> [options]       Write tracked changes/comments
+  docx-review --diff <old.docx> <new.docx> [--json]     Semantic document diff
+  docx-review --textconv <file.docx>                     Git textconv (normalized text)
+  docx-review --git-setup                                Print git configuration
   cat edits.json | docx-review <input.docx> [options]
 
-Options:
-  --read                 Read mode: extract tracked changes, comments, and metadata
+Diff & Git Integration:
+  --diff                 Compare two documents semantically (text, comments,
+                         tracked changes, formatting, styles, metadata)
+  --textconv             Output normalized text for use as git diff textconv driver
+  --git-setup            Print .gitattributes and .gitconfig setup instructions
+
+Read/Write Options:
+  --read                 Read mode: extract tracked changes, comments, metadata
   -o, --output <path>    Output file path (default: <input>_reviewed.docx)
   --author <name>        Reviewer name (overrides manifest author)
   --json                 Output results as JSON
-  --dry-run              Validate manifest without modifying (reports match counts)
+  --dry-run              Validate manifest without modifying
   -h, --help             Show this help
 
 JSON Manifest Format:
@@ -203,6 +299,30 @@ JSON Manifest Format:
       { ""anchor"": ""text to comment on"", ""text"": ""Comment content"" }
     ]
   }");
+    }
+
+    static void PrintGitSetup()
+    {
+        Console.WriteLine(@"Git Integration for Word Documents
+══════════════════════════════════
+
+Add to your repository's .gitattributes:
+
+  *.docx diff=docx
+
+Add to your .gitconfig (global or per-repo):
+
+  [diff ""docx""]
+      textconv = docx-review --textconv
+
+Now `git diff` will show meaningful content changes for .docx files,
+including text, comments, tracked changes, formatting, and metadata.
+
+For two-file comparison outside git:
+
+  docx-review --diff old.docx new.docx
+  docx-review --diff old.docx new.docx --json
+");
     }
 
     static void PrintHumanResult(ProcessingResult result, bool dryRun)
