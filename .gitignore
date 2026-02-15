@@ -8,6 +8,7 @@ obj/
 .DS_Store
 *.docx
 !examples/*.docx
+!templates/*.docx
 build/
 bin/
 obj/
