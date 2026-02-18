@@ -58,6 +58,12 @@ docx-review input.docx edits.json --dry-run
 
 # JSON output for pipelines
 docx-review input.docx edits.json -o reviewed.docx --json
+
+# Create a new document from the bundled NIH template
+docx-review --create -o manuscript.docx
+
+# Create and populate in one step
+docx-review --create -o manuscript.docx populate.json --json
 ```
 
 ## JSON Manifest Format
@@ -180,6 +186,8 @@ The `--textconv` driver normalizes documents to readable text:
 | `--author <name>` | Reviewer name for tracked changes (overrides manifest `author`) |
 | `--json` | Output results as JSON (for scripting/pipelines) |
 | `--dry-run` | Validate the manifest without modifying the document |
+| `--create` | Create new document from bundled NIH template |
+| `--template <path>` | Use custom template instead of built-in NIH template |
 | `--read` | Extract document content (tracked changes, comments, metadata) |
 | `--diff` | Compare two documents semantically |
 | `--textconv` | Git textconv driver (normalized text output) |

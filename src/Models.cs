@@ -11,6 +11,7 @@ namespace DocxReview;
 [JsonSerializable(typeof(ProcessingResult))]
 [JsonSerializable(typeof(ReadResult))]
 [JsonSerializable(typeof(DiffResult))]
+[JsonSerializable(typeof(CreateResult))]
 [JsonSourceGenerationOptions(
     PropertyNameCaseInsensitive = true,
     WriteIndented = true
@@ -254,4 +255,39 @@ public class ReadSummary
 
     [JsonPropertyName("comment_authors")]
     public List<string> CommentAuthors { get; set; } = new();
+}
+
+// ── Create-mode models ──────────────────────────────────────────
+
+/// <summary>
+/// Result of --create mode: template copy + optional populate.
+/// </summary>
+public class CreateResult
+{
+    [JsonPropertyName("template")]
+    public string Template { get; set; } = "";
+
+    [JsonPropertyName("output")]
+    public string? Output { get; set; }
+
+    [JsonPropertyName("populated")]
+    public bool Populated { get; set; }
+
+    [JsonPropertyName("changes_attempted")]
+    public int ChangesAttempted { get; set; }
+
+    [JsonPropertyName("changes_succeeded")]
+    public int ChangesSucceeded { get; set; }
+
+    [JsonPropertyName("comments_attempted")]
+    public int CommentsAttempted { get; set; }
+
+    [JsonPropertyName("comments_succeeded")]
+    public int CommentsSucceeded { get; set; }
+
+    [JsonPropertyName("results")]
+    public List<EditResult> Results { get; set; } = new();
+
+    [JsonPropertyName("success")]
+    public bool Success { get; set; }
 }

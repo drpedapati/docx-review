@@ -32,54 +32,34 @@ A NIH-standard Word template is included at `templates/nih-standard.docx`:
 ### Creating a new document from template
 
 ```bash
-# 1. Copy the template
-cp "$(brew --prefix docx-review)/share/docx-review/templates/nih-standard.docx" manuscript.docx
+# Create a blank NIH template
+docx-review --create -o manuscript.docx
 
-# 2. Read the template structure
-docx-review manuscript.docx --read --json
+# Create and populate in one step
+docx-review --create -o manuscript.docx populate.json --json
 
-# 3. Build an edit manifest to populate sections
-cat > populate.json << 'EOF'
-{
-  "author": "Dr. Smith",
-  "changes": [
-    {
-      "type": "replace",
-      "find": "Document Title",
-      "replace": "Neural Mechanisms of Auditory Processing in ALS"
-    },
-    {
-      "type": "replace",
-      "find": "Author Name, Degree(s)",
-      "replace": "Jane Smith, MD, PhD"
-    },
-    {
-      "type": "replace",
-      "find": "Department, Institution",
-      "replace": "Department of Neurology, University Medical Center"
-    },
-    {
-      "type": "replace",
-      "find": "State the objectives of the proposed research and describe the specific aims.",
-      "replace": "The long-term goal of this project is to..."
-    }
-  ]
-}
-EOF
+# Validate a populate manifest first
+docx-review --create populate.json --dry-run --json
 
-# 4. Apply edits (tracked changes visible in Word)
-docx-review manuscript.docx populate.json -o manuscript.docx --json
+# Use a custom template instead of the built-in NIH template
+docx-review --create --template custom.docx -o output.docx
 ```
 
-### Template location after Homebrew install
-
-The template installs to `$(brew --prefix docx-review)/share/docx-review/templates/`. To find it:
-
-```bash
-ls "$(brew --prefix docx-review)/share/docx-review/templates/"
-```
+The NIH template is embedded in the binary — no need to locate files on disk.
 
 ## Modes
+
+### Create: New document from NIH template
+
+```bash
+docx-review --create -o manuscript.docx                           # blank template
+docx-review --create -o manuscript.docx populate.json             # create + populate
+docx-review --create -o manuscript.docx populate.json --json      # structured output
+docx-review --create populate.json --dry-run --json               # validate first
+docx-review --create --template custom.docx -o output.docx        # custom template
+```
+
+Creates a new `.docx` from the bundled NIH template (Arial 11pt, 0.75" margins, proper heading styles). Optionally populates it with content via a standard edit manifest. Populate edits appear as tracked changes.
 
 ### Edit: Apply tracked changes and comments
 
@@ -248,13 +228,13 @@ For addressing reviewer comments on a manuscript:
 
 For creating a fresh manuscript from the NIH template:
 
-1. Copy `templates/nih-standard.docx` to your workspace
-2. Read it with `--read --json` to see placeholder text
-3. Build a manifest that replaces each placeholder with real content
-4. Apply with `docx-review` — the new content appears as tracked changes
-5. Accept all changes in Word to finalize
+1. Create the document: `docx-review --create -o manuscript.docx`
+2. Build a populate manifest replacing placeholder text with real content
+3. Validate: `docx-review --create populate.json --dry-run --json`
+4. Apply: `docx-review --create -o manuscript.docx populate.json --json`
+5. Open in Word — accept all tracked changes to finalize
 
-This preserves the template's formatting (Arial, margins, page numbers, heading styles) while giving you a complete revision trail of how the document was populated.
+Or combine steps 1+4 into a single command. The template's formatting (Arial, margins, page numbers, heading styles) is preserved.
 
 ## Key behaviors
 

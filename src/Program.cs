@@ -19,6 +19,8 @@ class Program
         bool diffMode = false;
         bool textConvMode = false;
         bool gitSetup = false;
+        bool createMode = false;
+        string? templatePath = null;
         bool showHelp = false;
         bool showVersion = false;
         var positionalArgs = new List<string>();
@@ -56,6 +58,12 @@ class Program
                 case "--git-setup":
                     gitSetup = true;
                     break;
+                case "--create":
+                    createMode = true;
+                    break;
+                case "--template":
+                    if (i + 1 < args.Length) templatePath = args[++i];
+                    break;
                 case "-h":
                 case "--help":
                     showHelp = true;
@@ -82,6 +90,80 @@ class Program
         {
             PrintGitSetup();
             return 0;
+        }
+
+        // ── Create mode ──────────────────────────────────────────
+        if (createMode)
+        {
+            if (outputPath == null && !dryRun)
+            {
+                Error("--create requires -o/--output path: docx-review --create -o manuscript.docx");
+                return 1;
+            }
+
+            // In create mode, positionalArgs[0] is the manifest (not an input docx)
+            string? createManifestPath = positionalArgs.Count >= 1 ? positionalArgs[0] : null;
+            EditManifest? createManifest = null;
+
+            if (createManifestPath != null)
+            {
+                if (!File.Exists(createManifestPath))
+                {
+                    Error($"Manifest file not found: {createManifestPath}");
+                    return 1;
+                }
+                string mJson = File.ReadAllText(createManifestPath);
+                try
+                {
+                    createManifest = JsonSerializer.Deserialize(mJson, DocxReviewJsonContext.Default.EditManifest)
+                        ?? throw new Exception("Manifest deserialized to null");
+                }
+                catch (Exception ex)
+                {
+                    Error($"Failed to parse manifest JSON: {ex.Message}");
+                    return 1;
+                }
+            }
+            else if (Console.IsInputRedirected)
+            {
+                string mJson = Console.In.ReadToEnd();
+                if (!string.IsNullOrWhiteSpace(mJson))
+                {
+                    try
+                    {
+                        createManifest = JsonSerializer.Deserialize(mJson, DocxReviewJsonContext.Default.EditManifest)
+                            ?? throw new Exception("Manifest deserialized to null");
+                    }
+                    catch (Exception ex)
+                    {
+                        Error($"Failed to parse manifest JSON: {ex.Message}");
+                        return 1;
+                    }
+                }
+            }
+
+            string createAuthor = author ?? createManifest?.Author ?? "Author";
+
+            try
+            {
+                var creator = new DocumentCreator();
+                var createResult = creator.Create(outputPath ?? "", createManifest, createAuthor, templatePath, dryRun);
+
+                if (jsonOutput)
+                {
+                    Console.WriteLine(JsonSerializer.Serialize(createResult, DocxReviewJsonContext.Default.CreateResult));
+                }
+                else
+                {
+                    PrintCreateResult(createResult, dryRun);
+                }
+                return createResult.Success ? 0 : 1;
+            }
+            catch (Exception ex)
+            {
+                Error($"Create failed: {ex.Message}");
+                return 1;
+            }
         }
 
         if (showHelp || (inputPath == null && !gitSetup))
@@ -262,15 +344,21 @@ class Program
 
     static void PrintUsage()
     {
-        Console.Error.WriteLine(@"docx-review — Read, write, and diff Word documents with full revision awareness
+        Console.Error.WriteLine(@"docx-review — Read, write, create, and diff Word documents with full revision awareness
 
 Usage:
   docx-review <input.docx> --read [--json]              Read review state
   docx-review <input.docx> <edits.json> [options]       Write tracked changes/comments
+  docx-review --create -o <output.docx> [manifest.json]  Create from NIH template
   docx-review --diff <old.docx> <new.docx> [--json]     Semantic document diff
   docx-review --textconv <file.docx>                     Git textconv (normalized text)
   docx-review --git-setup                                Print git configuration
   cat edits.json | docx-review <input.docx> [options]
+
+Create Options:
+  --create               Create new document from bundled NIH template
+  --template <path>      Use custom template instead of built-in NIH template
+  -o, --output <path>    Output file path (required for create)
 
 Diff & Git Integration:
   --diff                 Compare two documents semantically (text, comments,
@@ -349,6 +437,37 @@ For two-file comparison outside git:
             Console.WriteLine(dryRun ? "✅ All edits would succeed" : "✅ All edits applied successfully");
         else
             Console.WriteLine("⚠️  Some edits failed (see above)");
+    }
+
+    static void PrintCreateResult(CreateResult result, bool dryRun)
+    {
+        string mode = dryRun ? "[DRY RUN] " : "";
+        Console.WriteLine($"\n{mode}docx-review create");
+        Console.WriteLine(new string('─', 50));
+        Console.WriteLine($"  Template: {result.Template}");
+        if (!dryRun && result.Output != null)
+            Console.WriteLine($"  Output:   {result.Output}");
+
+        if (result.Populated)
+        {
+            Console.WriteLine($"  Changes:  {result.ChangesSucceeded}/{result.ChangesAttempted}");
+            Console.WriteLine($"  Comments: {result.CommentsSucceeded}/{result.CommentsAttempted}");
+            Console.WriteLine();
+
+            foreach (var r in result.Results)
+            {
+                string icon = r.Success ? "✓" : "✗";
+                Console.WriteLine($"  {icon} [{r.Type}] {r.Message}");
+            }
+        }
+
+        Console.WriteLine();
+        if (!result.Populated)
+            Console.WriteLine(dryRun ? "✅ Template would be created successfully" : "✅ Template copied — ready for editing");
+        else if (result.Success)
+            Console.WriteLine(dryRun ? "✅ All populate edits would succeed" : "✅ Template created and populated successfully");
+        else
+            Console.WriteLine("⚠️  Some populate edits failed (see above)");
     }
 
     static string GetVersion()

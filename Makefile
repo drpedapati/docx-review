@@ -38,7 +38,7 @@ PUBLISH_FLAGS := -c Release \
   -p:TrimMode=link \
   -p:SuppressTrimAnalysisWarnings=true
 
-.PHONY: build install all docker test clean help
+.PHONY: build install all docker test test-create clean help
 
 ## build: Build single-file binary for current platform
 build:
@@ -103,6 +103,18 @@ test-dry: build
 	else \
 		echo "Usage: make test-dry TEST_DOC=/path/to/document.docx"; \
 	fi
+
+## test-create: Test create mode
+test-create: build
+	@echo "Testing --create mode..."
+	$(BUILD_DIR)/$(BINARY_NAME) --create -o $(BUILD_DIR)/test_created.docx --json
+	@echo ""
+	@echo "Testing --create dry-run..."
+	$(BUILD_DIR)/$(BINARY_NAME) --create --dry-run --json
+	@echo ""
+	@ls -lh $(BUILD_DIR)/test_created.docx
+	@rm -f $(BUILD_DIR)/test_created.docx
+	@echo "✅ Create tests passed"
 
 ## clean: Remove build artifacts
 clean:
