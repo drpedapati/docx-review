@@ -7,6 +7,7 @@ RUN dotnet restore
 
 # Copy source and publish
 COPY src/ src/
+COPY templates/ templates/
 RUN dotnet publish -c Release -o /app/publish --no-restore \
     /p:PublishTrimmed=false \
     /p:PublishSingleFile=false
@@ -16,4 +17,4 @@ FROM mcr.microsoft.com/dotnet/runtime:8.0-alpine
 WORKDIR /app
 COPY --from=build /app/publish .
 
-ENTRYPOINT ["dotnet", "/app/DocxReview.dll"]
+ENTRYPOINT ["dotnet", "/app/docx-review.dll"]

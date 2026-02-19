@@ -1,6 +1,6 @@
 ---
 name: docx-review
-description: "Read, edit, and diff Word documents (.docx) with tracked changes and comments using the docx-review CLI — a .NET 8 tool built on Microsoft's Open XML SDK. Ships as a single 12MB native binary (no runtime). Use when: (1) Adding tracked changes (replace, delete, insert) to a .docx, (2) Adding anchored comments to a .docx, (3) Reading/extracting text, tracked changes, comments, and metadata from a .docx, (4) Diffing two .docx files semantically, (5) Responding to peer reviewer comments with tracked revisions, (6) Proofreading or revising manuscripts with reviewable output, (7) Any task requiring valid .docx output with proper w:del/w:ins markup that renders natively in Word."
+description: "Read, edit, and diff Word documents (.docx) with tracked changes and comments using the docx-review CLI — a .NET 8 tool built on Microsoft's Open XML SDK. Ships as a single 12MB native binary (no runtime). Use when: (1) Adding tracked changes (replace, delete, insert) to a .docx, (2) Adding anchored comments to a .docx, (3) Reading/extracting text, tracked changes, comments, and metadata from a .docx, (4) Diffing two .docx files semantically, (5) Responding to peer reviewer comments with tracked revisions, (6) Proofreading or revising manuscripts with reviewable output, (7) Any task requiring valid tracked-change .docx output with proper w:del/w:ins markup that renders natively in Word."
 ---
 
 # docx-review
@@ -10,12 +10,17 @@ CLI tool for Word document review: tracked changes, comments, read, diff, and gi
 ## Install
 
 ```bash
-brew install henrybloomingdale/tools/docx-review
+brew install drpedapati/tools/docx-review
 ```
 
 Binary: `/opt/homebrew/bin/docx-review` (12MB, self-contained, no runtime)
 
 Verify: `docx-review --version`
+
+## Workflow Choice (sciClaw integration)
+
+- For new clean manuscripts: `pandoc manuscript.md -o manuscript.docx`
+- For tracked review edits/comments on existing documents: use `docx-review`
 
 ## Modes
 
@@ -199,7 +204,7 @@ The CinciNeuro Open XML SDK ecosystem:
 
 | Tool | Install | Purpose |
 |------|---------|---------|
-| `pptx-review` | `brew install henrybloomingdale/tools/pptx-review` | PowerPoint read/edit |
-| `xlsx-review` | `brew install henrybloomingdale/tools/xlsx-review` | Excel read/edit |
+| `pptx-review` | `brew install drpedapati/tools/pptx-review` | PowerPoint read/edit |
+| `xlsx-review` | `brew install drpedapati/tools/xlsx-review` | Excel read/edit |
 
 Same architecture: .NET 8, Open XML SDK, single binary, JSON in/out.

@@ -21,13 +21,13 @@ Open XML SDK is the gold standard — it's Microsoft's own library for manipulat
 ### Option 1: Homebrew (recommended)
 
 ```bash
-brew install henrybloomingdale/tools/docx-review
+brew install drpedapati/tools/docx-review
 ```
 
 ### Option 2: Native Binary
 
 ```bash
-git clone https://github.com/henrybloomingdale/docx-review.git
+git clone https://github.com/drpedapati/docx-review.git
 cd docx-review
 make install    # Builds + installs to /usr/local/bin
 ```
@@ -65,6 +65,12 @@ docx-review --create -o manuscript.docx
 # Create and populate in one step
 docx-review --create -o manuscript.docx populate.json --json
 ```
+
+### Workflow choice (when used with sciClaw)
+
+- For **new clean manuscripts**: write Markdown and run `pandoc manuscript.md -o manuscript.docx`.
+- For **review/revision workflows with visible markup**: use `docx-review` edit manifests and tracked changes.
+- `docx-review --create` is best for template-based drafting when you explicitly want a revision trail.
 
 ## JSON Manifest Format
 

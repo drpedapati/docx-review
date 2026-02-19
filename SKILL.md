@@ -1,7 +1,7 @@
 ---
 name: docx-review
-description: "Read, edit, and diff Word documents (.docx) with tracked changes and comments using the docx-review CLI — a .NET 8 tool built on Microsoft's Open XML SDK. Ships as a single 12MB native binary (no runtime). Use when: (1) Adding tracked changes (replace, delete, insert) to a .docx, (2) Adding anchored comments to a .docx, (3) Reading/extracting text, tracked changes, comments, and metadata from a .docx, (4) Diffing two .docx files semantically, (5) Responding to peer reviewer comments with tracked revisions, (6) Proofreading or revising manuscripts with reviewable output, (7) Creating new documents from the NIH template, (8) Any task requiring valid .docx output with proper w:del/w:ins markup that renders natively in Word."
-metadata: {"nanobot":{"emoji":"📝","requires":{"bins":["docx-review"]},"install":[{"id":"brew","kind":"brew","formula":"henrybloomingdale/tools/docx-review","bins":["docx-review"],"label":"Install docx-review (brew)"}]}}
+description: "Read, edit, and diff Word documents (.docx) with tracked changes and comments using the docx-review CLI — a .NET 8 tool built on Microsoft's Open XML SDK. Ships as a single 12MB native binary (no runtime). Use when: (1) Adding tracked changes (replace, delete, insert) to a .docx, (2) Adding anchored comments to a .docx, (3) Reading/extracting text, tracked changes, comments, and metadata from a .docx, (4) Diffing two .docx files semantically, (5) Responding to peer reviewer comments with tracked revisions, (6) Proofreading or revising manuscripts with reviewable output, (7) Any task requiring valid tracked-change .docx output with proper w:del/w:ins markup that renders natively in Word."
+metadata: {"nanobot":{"emoji":"📝","requires":{"bins":["docx-review"]},"install":[{"id":"brew","kind":"brew","formula":"drpedapati/tools/docx-review","bins":["docx-review"],"label":"Install docx-review (brew)"}]}}
 ---
 
 # docx-review
@@ -11,45 +11,34 @@ CLI tool for Word document review: tracked changes, comments, read, diff, and gi
 ## Install
 
 ```bash
-brew install henrybloomingdale/tools/docx-review
+brew install drpedapati/tools/docx-review
 ```
 
 Binary: `/opt/homebrew/bin/docx-review` (12MB, self-contained, no runtime)
 
 Verify: `docx-review --version`
 
-## Template
+## Workflow Choice (Critical)
 
-A NIH-standard Word template is included at `templates/nih-standard.docx`:
+### Creating a NEW manuscript/docx with clean output
 
-- **Font:** Arial 11pt body, Arial Bold 14pt/12pt/11pt for Heading 1/2/3
-- **Margins:** 0.75" all sides
-- **Colors:** Black only — no color headings, no shading
-- **Spacing:** 1.15 line spacing, 6pt after paragraphs
-- **Page numbers:** Bottom center, Arial 10pt
-- **Sections:** Specific Aims, Significance, Innovation, Approach, Preliminary Data, References
-
-### Creating a new document from template
+Use `pandoc` from Markdown, not docx-review edit manifests:
 
 ```bash
-# Create a blank NIH template
-docx-review --create -o manuscript.docx
-
-# Create and populate in one step
-docx-review --create -o manuscript.docx populate.json --json
-
-# Validate a populate manifest first
-docx-review --create populate.json --dry-run --json
-
-# Use a custom template instead of the built-in NIH template
-docx-review --create --template custom.docx -o output.docx
+pandoc manuscript.md -o manuscript.docx
 ```
 
-The NIH template is embedded in the binary — no need to locate files on disk.
+### Editing an EXISTING document with visible review markup
+
+Use `docx-review` when tracked changes/comments are explicitly desired.
+
+### Anti-pattern to avoid
+
+Do **not** use docx-review placeholder replacement manifests for first-draft manuscripts unless the user explicitly requests tracked changes.
 
 ## Modes
 
-### Create: New document from NIH template
+### Create (Advanced): Template population with revision trail
 
 ```bash
 docx-review --create -o manuscript.docx                           # blank template
@@ -59,7 +48,7 @@ docx-review --create populate.json --dry-run --json               # validate fir
 docx-review --create --template custom.docx -o output.docx        # custom template
 ```
 
-Creates a new `.docx` from the bundled NIH template (Arial 11pt, 0.75" margins, proper heading styles). Optionally populates it with content via a standard edit manifest. Populate edits appear as tracked changes.
+Creates a new `.docx` from the bundled NIH template. Populate edits appear as tracked changes and are best for explicit audit/review workflows.
 
 ### Edit: Apply tracked changes and comments
 
@@ -224,17 +213,17 @@ For addressing reviewer comments on a manuscript:
 3. Validate + apply
 4. Author opens in Word, accepts/rejects each change individually
 
-## Workflow: New Document from Template
+## Workflow: Template Population with Explicit Revision Trail (Advanced)
 
-For creating a fresh manuscript from the NIH template:
+Only use this workflow when the user explicitly wants visible tracked changes during template population:
 
 1. Create the document: `docx-review --create -o manuscript.docx`
 2. Build a populate manifest replacing placeholder text with real content
 3. Validate: `docx-review --create populate.json --dry-run --json`
 4. Apply: `docx-review --create -o manuscript.docx populate.json --json`
-5. Open in Word — accept all tracked changes to finalize
+5. Open in Word and accept/reject changes as needed
 
-Or combine steps 1+4 into a single command. The template's formatting (Arial, margins, page numbers, heading styles) is preserved.
+For standard first-draft creation, prefer `pandoc manuscript.md -o manuscript.docx`.
 
 ## Key behaviors
 
@@ -253,7 +242,7 @@ The Open XML SDK ecosystem:
 
 | Tool | Install | Purpose |
 |------|---------|---------|
-| `pptx-review` | `brew install henrybloomingdale/tools/pptx-review` | PowerPoint read/edit |
-| `xlsx-review` | `brew install henrybloomingdale/tools/xlsx-review` | Excel read/edit |
+| `pptx-review` | `brew install drpedapati/tools/pptx-review` | PowerPoint read/edit |
+| `xlsx-review` | `brew install drpedapati/tools/xlsx-review` | Excel read/edit |
 
 Same architecture: .NET 8, Open XML SDK, single binary, JSON in/out.
