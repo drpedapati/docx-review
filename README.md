@@ -102,6 +102,11 @@ docx-review --create -o manuscript.docx populate.json --json
     {
       "anchor": "text to anchor the comment to",
       "text": "Comment content displayed in the margin"
+    },
+    {
+      "op": "update",
+      "id": 12,
+      "text": "Original reviewer comment...\n\nDocRevise action: tightened efficacy claim language in Section 4.2."
     }
   ]
 }
@@ -116,11 +121,17 @@ docx-review --create -o manuscript.docx populate.json --json
 | `insert_after` | `anchor`, `text` | Finds anchor text, inserts new text after it (w:ins) |
 | `insert_before` | `anchor`, `text` | Finds anchor text, inserts new text before it (w:ins) |
 
-### Comment Format
+### Comment Operations
 
-Each comment needs:
-- `anchor` — text in the document to attach the comment to (CommentRangeStart/End markers)
-- `text` — the comment content shown in Word's review pane
+| Operation | Required Fields | Description |
+|-----------|-----------------|-------------|
+| Add (default) | `anchor`, `text` | Adds a new anchored comment in `comments.xml` and body markers |
+| Update | `op: "update"`, `id`, `text` | Replaces text of an existing comment by ID while keeping metadata and anchors intact |
+
+Notes:
+- If `op` is omitted, behavior defaults to add (backward compatible).
+- `id` must match an existing Word comment ID in `comments.xml`.
+- `update` preserves existing comment author/date/initials unless you separately modify them.
 
 ## Semantic Diff & Git Integration
 
