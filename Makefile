@@ -38,7 +38,7 @@ PUBLISH_FLAGS := -c Release \
   -p:TrimMode=link \
   -p:SuppressTrimAnalysisWarnings=true
 
-.PHONY: build install all docker test test-create clean help
+.PHONY: build install all docker test test-create test-comment-update clean help
 
 ## build: Build single-file binary for current platform
 build:
@@ -115,6 +115,10 @@ test-create: build
 	@ls -lh $(BUILD_DIR)/test_created.docx
 	@rm -f $(BUILD_DIR)/test_created.docx
 	@echo "✅ Create tests passed"
+
+## test-comment-update: Integration test for comment update op by ID
+test-comment-update:
+	@bash tests/test-comment-update.sh
 
 ## clean: Remove build artifacts
 clean:

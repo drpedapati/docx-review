@@ -54,33 +54,88 @@ public class DocumentEditor
             // --- Comments first (before tracked changes modify XML) ---
             if (manifest.Comments != null)
             {
-                if (!dryRun)
+                bool hasAddCommentOps = manifest.Comments.Any(c =>
+                {
+                    string op = (c.Op ?? "add").Trim();
+                    return op.Length == 0 || op.Equals("add", StringComparison.OrdinalIgnoreCase);
+                });
+
+                if (!dryRun && hasAddCommentOps)
                     EnsureCommentsPart(doc);
 
-                int commentId = dryRun ? 0 : GetNextCommentId(doc);
+                int commentId = (dryRun || !hasAddCommentOps) ? 0 : GetNextCommentId(doc);
 
                 for (int i = 0; i < manifest.Comments.Count; i++)
                 {
                     var cdef = manifest.Comments[i];
-                    var er = new EditResult { Index = i, Type = "comment" };
+                    string op = (cdef.Op ?? "add").Trim().ToLowerInvariant();
+                    if (op.Length == 0) op = "add";
 
-                    if (string.IsNullOrEmpty(cdef.Anchor))
+                    var er = new EditResult
                     {
-                        er.Success = false;
-                        er.Message = "Empty anchor text";
+                        Index = i,
+                        Type = op == "update" ? "comment_update" : "comment"
+                    };
+
+                    if (op == "update")
+                    {
+                        if (cdef.Id == null)
+                        {
+                            er.Success = false;
+                            er.Message = "Missing 'id' for comment update";
+                        }
+                        else if (cdef.Text == null)
+                        {
+                            er.Success = false;
+                            er.Message = "Missing 'text' for comment update";
+                        }
+                        else
+                        {
+                            string idStr = cdef.Id.Value.ToString();
+                            bool exists = CommentExistsById(doc, idStr);
+                            if (!exists)
+                            {
+                                er.Success = false;
+                                er.Message = $"Comment id not found: {idStr}";
+                            }
+                            else if (dryRun)
+                            {
+                                er.Success = true;
+                                er.Message = "Comment found for update";
+                            }
+                            else
+                            {
+                                bool ok = UpdateCommentById(doc, idStr, cdef.Text);
+                                er.Success = ok;
+                                er.Message = ok ? "Comment updated" : $"Comment id not found: {idStr}";
+                            }
+                        }
                     }
-                    else if (dryRun)
+                    else if (op == "add")
                     {
-                        bool found = FindAnchorInParagraphs(paragraphs, cdef.Anchor);
-                        er.Success = found;
-                        er.Message = found ? "Anchor found" : $"Anchor not found: \"{Truncate(cdef.Anchor, 60)}\"";
+                        if (string.IsNullOrEmpty(cdef.Anchor))
+                        {
+                            er.Success = false;
+                            er.Message = "Empty anchor text";
+                        }
+                        else if (dryRun)
+                        {
+                            bool found = FindAnchorInParagraphs(paragraphs, cdef.Anchor!);
+                            er.Success = found;
+                            er.Message = found ? "Anchor found" : $"Anchor not found: \"{Truncate(cdef.Anchor!, 60)}\"";
+                        }
+                        else
+                        {
+                            bool ok = AddComment(doc, paragraphs, cdef.Anchor!, cdef.Text ?? "", commentId);
+                            er.Success = ok;
+                            er.Message = ok ? "Comment added" : $"Anchor not found: \"{Truncate(cdef.Anchor!, 60)}\"";
+                            if (ok) commentId++;
+                        }
                     }
                     else
                     {
-                        bool ok = AddComment(doc, paragraphs, cdef.Anchor, cdef.Text, commentId);
-                        er.Success = ok;
-                        er.Message = ok ? "Comment added" : $"Anchor not found: \"{Truncate(cdef.Anchor, 60)}\"";
-                        if (ok) commentId++;
+                        er.Success = false;
+                        er.Message = $"Unknown comment op: {op}";
                     }
 
                     result.Results.Add(er);
@@ -610,6 +665,101 @@ public class DocumentEditor
         }
         return false;
     }
+
+    private static bool CommentExistsById(WordprocessingDocument doc, string id)
+    {
+        var commentsPart = doc.MainDocumentPart!.WordprocessingCommentsPart;
+        if (commentsPart?.Comments == null) return false;
+
+        return commentsPart.Comments.Elements<Comment>()
+            .Any(c => string.Equals(c.Id?.Value, id, StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// Replace the text payload for an existing comment ID while preserving
+    /// comment metadata (author/date/initials) and anchor references in the body.
+    /// </summary>
+    private static bool UpdateCommentById(WordprocessingDocument doc, string id, string newText)
+    {
+        var commentsPart = doc.MainDocumentPart!.WordprocessingCommentsPart;
+        if (commentsPart?.Comments == null) return false;
+
+        var comment = commentsPart.Comments.Elements<Comment>()
+            .FirstOrDefault(c => string.Equals(c.Id?.Value, id, StringComparison.Ordinal));
+        if (comment == null) return false;
+
+        RewriteCommentText(comment, newText);
+        commentsPart.Comments.Save();
+        return true;
+    }
+
+    private static void RewriteCommentText(Comment comment, string text)
+    {
+        var firstPara = comment.Elements<Paragraph>().FirstOrDefault();
+        var paraAttrs = firstPara?.GetAttributes().ToList() ?? new List<OpenXmlAttribute>();
+        var paraProps = firstPara?.ParagraphProperties?.CloneNode(true) as ParagraphProperties;
+
+        var newPara = new Paragraph();
+        if (paraProps != null)
+            newPara.Append(paraProps);
+        foreach (var attr in paraAttrs)
+            newPara.SetAttribute(attr);
+
+        newPara.Append(new Run(
+            new RunProperties(new RunStyle() { Val = "CommentReference" }),
+            new AnnotationReferenceMark()
+        ));
+
+        string normalized = NormalizeLineEndings(text);
+        int docReviseIdx = normalized.IndexOf("DocRevise", StringComparison.OrdinalIgnoreCase);
+        if (docReviseIdx > 0)
+        {
+            // Force DocRevise note to begin after a blank line for consistent reviewer loop formatting.
+            string before = normalized.Substring(0, docReviseIdx).TrimEnd('\n');
+            string after = normalized.Substring(docReviseIdx).TrimStart('\n');
+            normalized = string.IsNullOrEmpty(before) ? after : before + "\n\n" + after;
+        }
+
+        docReviseIdx = normalized.IndexOf("DocRevise", StringComparison.OrdinalIgnoreCase);
+        if (docReviseIdx >= 0)
+        {
+            AppendTextWithLineBreaks(newPara, normalized.Substring(0, docReviseIdx), false);
+            AppendTextWithLineBreaks(newPara, normalized.Substring(docReviseIdx, "DocRevise".Length), true);
+            AppendTextWithLineBreaks(newPara, normalized.Substring(docReviseIdx + "DocRevise".Length), false);
+        }
+        else
+        {
+            AppendTextWithLineBreaks(newPara, normalized, false);
+        }
+
+        foreach (var para in comment.Elements<Paragraph>().ToList())
+            para.Remove();
+        comment.Append(newPara);
+    }
+
+    private static void AppendTextWithLineBreaks(Paragraph para, string text, bool bold)
+    {
+        if (string.IsNullOrEmpty(text)) return;
+
+        string[] lines = NormalizeLineEndings(text).Split('\n');
+        for (int i = 0; i < lines.Length; i++)
+        {
+            if (i > 0)
+                para.Append(new Run(new Break()));
+
+            if (lines[i].Length == 0)
+                continue;
+
+            var run = new Run();
+            if (bold)
+                run.Append(new RunProperties(new Bold()));
+            run.Append(new Text(lines[i]) { Space = SpaceProcessingModeValues.Preserve });
+            para.Append(run);
+        }
+    }
+
+    private static string NormalizeLineEndings(string s) =>
+        s.Replace("\r\n", "\n").Replace('\r', '\n');
 
     #endregion
 

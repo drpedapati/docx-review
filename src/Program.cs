@@ -384,7 +384,8 @@ JSON Manifest Format:
       { ""type"": ""insert_before"", ""anchor"": ""before this"", ""text"": ""new text"" }
     ],
     ""comments"": [
-      { ""anchor"": ""text to comment on"", ""text"": ""Comment content"" }
+      { ""anchor"": ""text to comment on"", ""text"": ""Comment content"" },
+      { ""op"": ""update"", ""id"": 12, ""text"": ""Updated comment text"" }
     ]
   }");
     }

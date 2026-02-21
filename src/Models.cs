@@ -55,15 +55,25 @@ public class Change
 }
 
 /// <summary>
-/// A comment anchored to specific text.
+/// A comment operation in the manifest.
+/// Backward-compatible default is adding a new anchored comment.
 /// </summary>
 public class CommentDef
 {
+    [JsonPropertyName("op")]
+    public string? Op { get; set; }
+
+    [JsonPropertyName("id")]
+    public int? Id { get; set; }
+
     [JsonPropertyName("anchor")]
-    public string Anchor { get; set; } = "";
+    public string? Anchor { get; set; }
 
     [JsonPropertyName("text")]
-    public string Text { get; set; } = "";
+    public string? Text { get; set; }
+
+    [JsonPropertyName("appendText")]
+    public string? AppendText { get; set; }
 }
 
 /// <summary>
