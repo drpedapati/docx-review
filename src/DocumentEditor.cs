@@ -331,19 +331,22 @@ public class DocumentEditor
             var firstAffected = affected.First();
             string revId = (_revId++).ToString();
 
+            // Use full concatenated text (handles runs with multiple <w:t> elements)
+            string firstFullText = string.Join("", firstAffected.run.Elements<Text>().Select(t => t.Text));
             string prefix = "";
             if (idx > firstAffected.start)
             {
-                var t = firstAffected.run.Elements<Text>().First();
-                prefix = t.Text.Substring(0, idx - firstAffected.start);
+                prefix = firstFullText.Substring(0, idx - firstAffected.start);
             }
 
             var lastAffected = affected.Last();
+            string lastFullText = (lastAffected.run == firstAffected.run)
+                ? firstFullText
+                : string.Join("", lastAffected.run.Elements<Text>().Select(t => t.Text));
             string suffix = "";
             if (matchEnd < lastAffected.end)
             {
-                var t = lastAffected.run.Elements<Text>().First();
-                suffix = t.Text.Substring(matchEnd - lastAffected.start);
+                suffix = lastFullText.Substring(matchEnd - lastAffected.start);
             }
 
             var insertPoint = firstAffected.run;
@@ -420,19 +423,22 @@ public class DocumentEditor
             var firstAffected = affected.First();
             string revId = (_revId++).ToString();
 
+            // Use full concatenated text (handles runs with multiple <w:t> elements)
+            string firstFullText = string.Join("", firstAffected.run.Elements<Text>().Select(t => t.Text));
             string prefix = "";
             if (idx > firstAffected.start)
             {
-                var t = firstAffected.run.Elements<Text>().First();
-                prefix = t.Text.Substring(0, idx - firstAffected.start);
+                prefix = firstFullText.Substring(0, idx - firstAffected.start);
             }
 
             var lastAffected = affected.Last();
+            string lastFullText = (lastAffected.run == firstAffected.run)
+                ? firstFullText
+                : string.Join("", lastAffected.run.Elements<Text>().Select(t => t.Text));
             string suffix = "";
             if (matchEnd < lastAffected.end)
             {
-                var t = lastAffected.run.Elements<Text>().First();
-                suffix = t.Text.Substring(matchEnd - lastAffected.start);
+                suffix = lastFullText.Substring(matchEnd - lastAffected.start);
             }
 
             var insertPoint = firstAffected.run;
@@ -508,8 +514,8 @@ public class DocumentEditor
             var rPr = targetEntry.rPr;
             var targetRun = targetEntry.run;
 
-            var textEl2 = targetRun.Elements<Text>().First();
-            string fullText = textEl2.Text;
+            // Concatenate all <w:t> elements (handles runs with <w:br/> between them)
+            string fullText = string.Join("", targetRun.Elements<Text>().Select(t => t.Text));
             int localSplit = splitPos - targetEntry.start;
 
             string beforeSplit = fullText.Substring(0, localSplit);
@@ -702,26 +708,26 @@ public class DocumentEditor
         {
             if (child is Run run)
             {
-                var textEl = run.Elements<Text>().FirstOrDefault();
-                if (textEl != null)
+                // Concatenate ALL <w:t> elements — a run may contain multiple
+                // text nodes separated by <w:br/> or other inline elements.
+                string runText = string.Join("", run.Elements<Text>().Select(t => t.Text));
+                if (runText.Length > 0)
                 {
-                    int len = textEl.Text.Length;
-                    runMap.Add((run, charPos, charPos + len,
+                    runMap.Add((run, charPos, charPos + runText.Length,
                         run.RunProperties?.CloneNode(true) as RunProperties, false));
-                    charPos += len;
+                    charPos += runText.Length;
                 }
             }
             else if (child is InsertedRun ins)
             {
                 foreach (var insRun in ins.Elements<Run>())
                 {
-                    var textEl = insRun.Elements<Text>().FirstOrDefault();
-                    if (textEl != null)
+                    string runText = string.Join("", insRun.Elements<Text>().Select(t => t.Text));
+                    if (runText.Length > 0)
                     {
-                        int len = textEl.Text.Length;
-                        runMap.Add((insRun, charPos, charPos + len,
+                        runMap.Add((insRun, charPos, charPos + runText.Length,
                             insRun.RunProperties?.CloneNode(true) as RunProperties, true));
-                        charPos += len;
+                        charPos += runText.Length;
                     }
                 }
             }
@@ -729,7 +735,7 @@ public class DocumentEditor
         }
 
         string text = string.Join("", runMap.Select(r =>
-            r.run.Elements<Text>().FirstOrDefault()?.Text ?? ""));
+            string.Join("", r.run.Elements<Text>().Select(t => t.Text))));
 
         return (text, runMap);
     }
