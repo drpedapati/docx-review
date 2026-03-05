@@ -23,6 +23,8 @@ public class DocumentExtraction
     public List<TableInfo> Tables { get; set; } = new();
     public List<ImageInfo> Images { get; set; } = new();
     public List<HeaderFooterInfo> HeadersFooters { get; set; } = new();
+    public List<FootnoteInfo> Footnotes { get; set; } = new();
+    public List<FootnoteInfo> Endnotes { get; set; } = new();
 }
 
 public class TableInfo
@@ -89,6 +91,27 @@ public static class DocumentExtractor
                 tableIndex++;
                 paraIndex++;  // tables count as a position in the flow
             }
+            else if (element is SdtBlock sdtBlock)
+            {
+                var sdtContent = sdtBlock.SdtContentBlock;
+                if (sdtContent != null)
+                {
+                    foreach (var sdtChild in sdtContent.ChildElements)
+                    {
+                        if (sdtChild is Paragraph sdtPara)
+                        {
+                            result.Paragraphs.Add(ExtractRichParagraph(sdtPara, paraIndex));
+                            paraIndex++;
+                        }
+                        else if (sdtChild is Table sdtTable)
+                        {
+                            result.Tables.Add(ExtractTable(sdtTable, tableIndex, paraIndex));
+                            tableIndex++;
+                            paraIndex++;
+                        }
+                    }
+                }
+            }
         }
 
         // Comments
@@ -99,6 +122,32 @@ public static class DocumentExtractor
 
         // Headers and Footers
         result.HeadersFooters = ExtractHeadersFooters(mainPart);
+
+        // Footnotes
+        if (mainPart.FootnotesPart?.Footnotes != null)
+        {
+            foreach (var fn in mainPart.FootnotesPart.Footnotes.Elements<Footnote>())
+            {
+                var id = fn.Id?.Value;
+                if (id == null || id == 0 || id == -1) continue;
+                var text = string.Join(" ", fn.Descendants<Text>().Select(t => t.Text));
+                if (!string.IsNullOrWhiteSpace(text))
+                    result.Footnotes.Add(new FootnoteInfo { Id = id.Value.ToString(), Text = text.Trim() });
+            }
+        }
+
+        // Endnotes
+        if (mainPart.EndnotesPart?.Endnotes != null)
+        {
+            foreach (var en in mainPart.EndnotesPart.Endnotes.Elements<Endnote>())
+            {
+                var id = en.Id?.Value;
+                if (id == null || id == 0 || id == -1) continue;
+                var text = string.Join(" ", en.Descendants<Text>().Select(t => t.Text));
+                if (!string.IsNullOrWhiteSpace(text))
+                    result.Endnotes.Add(new FootnoteInfo { Id = id.Value.ToString(), Text = text.Trim() });
+            }
+        }
 
         return result;
     }
@@ -157,6 +206,46 @@ public static class DocumentExtractor
                     });
                 }
             }
+            else if (child is Hyperlink link)
+            {
+                foreach (var linkRun in link.Elements<Run>())
+                {
+                    string text = GetFullRunText(linkRun);
+                    if (text.Length > 0)
+                    {
+                        textParts.Add(text);
+                        runs.Add(ExtractRunFormatting(linkRun, text));
+                    }
+                }
+            }
+            else if (child is SimpleField sf)
+            {
+                foreach (var sfRun in sf.Elements<Run>())
+                {
+                    string text = GetFullRunText(sfRun);
+                    if (text.Length > 0)
+                    {
+                        textParts.Add(text);
+                        runs.Add(ExtractRunFormatting(sfRun, text));
+                    }
+                }
+            }
+            else if (child is SdtRun sdt)
+            {
+                var sdtContent = sdt.SdtContentRun;
+                if (sdtContent != null)
+                {
+                    foreach (var sdtRun in sdtContent.Elements<Run>())
+                    {
+                        string text = GetFullRunText(sdtRun);
+                        if (text.Length > 0)
+                        {
+                            textParts.Add(text);
+                            runs.Add(ExtractRunFormatting(sdtRun, text));
+                        }
+                    }
+                }
+            }
         }
 
         info.Text = string.Join("", textParts);
@@ -176,6 +265,20 @@ public static class DocumentExtractor
         info.Underline = rPr.Underline != null && rPr.Underline.Val != null
             && rPr.Underline.Val.Value != UnderlineValues.None;
         info.Strikethrough = rPr.Strike != null && (rPr.Strike.Val == null || rPr.Strike.Val.Value);
+
+        // Superscript / Subscript
+        if (rPr.VerticalTextAlignment?.Val != null)
+        {
+            info.Superscript = rPr.VerticalTextAlignment.Val.Value == VerticalPositionValues.Superscript;
+            info.Subscript = rPr.VerticalTextAlignment.Val.Value == VerticalPositionValues.Subscript;
+        }
+
+        // Hidden text
+        info.Hidden = rPr.Vanish != null && (rPr.Vanish.Val == null || rPr.Vanish.Val.Value);
+
+        // Small caps / All caps
+        info.SmallCaps = rPr.SmallCaps != null && (rPr.SmallCaps.Val == null || rPr.SmallCaps.Val.Value);
+        info.AllCaps = rPr.Caps != null && (rPr.Caps.Val == null || rPr.Caps.Val.Value);
 
         // Font
         var fonts = rPr.RunFonts;
@@ -403,6 +506,16 @@ public static class DocumentExtractor
                 sb.Append(t.Text);
             else if (child is Break)
                 sb.Append('\n');
+            else if (child is TabChar)
+                sb.Append('\t');
+            else if (child is CarriageReturn)
+                sb.Append('\n');
+            else if (child is FootnoteReference fnRef)
+                sb.Append($"[^{fnRef.Id?.Value}]");
+            else if (child is EndnoteReference enRef)
+                sb.Append($"[^{enRef.Id?.Value}]");
+            else if (child is SymbolChar sym)
+                sb.Append($"[SYM:{sym.Font?.Value}/{sym.Char?.Value}]");
         }
         return sb.ToString();
     }
@@ -417,6 +530,10 @@ public static class DocumentExtractor
                 if (child is Text t)
                     sb.Append(t.Text);
                 else if (child is Break)
+                    sb.Append('\n');
+                else if (child is TabChar)
+                    sb.Append('\t');
+                else if (child is CarriageReturn)
                     sb.Append('\n');
             }
         }

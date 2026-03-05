@@ -2,6 +2,18 @@
 
 All notable changes to docx-review are documented here.
 
+## [1.4.1] - 2026-03-05
+
+### Fixed
+- Superscript/subscript text now emits `[SUP]`/`[SUB]` markers in textconv (fixes false "missing space" edits on affiliations like `1Division`)
+- Hyperlink display text no longer silently dropped during extraction
+- Footnote/endnote references emit `[^N]` inline markers; content extracted to `FOOTNOTES`/`ENDNOTES` sections
+- Tab characters emit `\t` instead of being silently dropped (fixes word-merging)
+- `SimpleField`, `SdtRun`, and `SdtBlock` content now extracted (fixes missing text from fields and content controls)
+- Hidden text (`w:vanish`) marked as `[HIDDEN]` so LLM avoids editing invisible content
+- Small caps and all caps emit `[SC]`/`[CAPS]` markers
+- `CarriageReturn` and `SymbolChar` elements handled in run text extraction
+
 ## [1.4.0] - 2026-03-05
 
 ### Added
