@@ -231,8 +231,19 @@ public class RichRunInfo
     public bool Italic { get; set; }
     public bool Underline { get; set; }
     public bool Strikethrough { get; set; }
+    public bool Superscript { get; set; }
+    public bool Subscript { get; set; }
+    public bool Hidden { get; set; }
+    public bool SmallCaps { get; set; }
+    public bool AllCaps { get; set; }
     public string? FontName { get; set; }
     public string? FontSize { get; set; }
     public string? Color { get; set; }
     public string? Highlight { get; set; }
+}
+
+public class FootnoteInfo
+{
+    public string Id { get; set; } = "";
+    public string Text { get; set; } = "";
 }

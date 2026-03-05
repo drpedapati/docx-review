@@ -128,6 +128,24 @@ public static class TextConv
             sb.AppendLine();
         }
 
+        // ── Footnotes ─────────────────────────────────────
+        if (doc.Footnotes.Count > 0)
+        {
+            sb.AppendLine("=== FOOTNOTES ===");
+            foreach (var fn in doc.Footnotes)
+                sb.AppendLine($"[^{fn.Id}]: {fn.Text}");
+            sb.AppendLine();
+        }
+
+        // ── Endnotes ──────────────────────────────────────
+        if (doc.Endnotes.Count > 0)
+        {
+            sb.AppendLine("=== ENDNOTES ===");
+            foreach (var en in doc.Endnotes)
+                sb.AppendLine($"[^{en.Id}]: {en.Text}");
+            sb.AppendLine();
+        }
+
         return sb.ToString();
     }
 
@@ -157,6 +175,11 @@ public static class TextConv
             if (run.Italic) text = $"[I]{text}[/I]";
             if (run.Underline) text = $"[U]{text}[/U]";
             if (run.Strikethrough) text = $"[S]{text}[/S]";
+            if (run.Superscript) text = $"[SUP]{text}[/SUP]";
+            if (run.Subscript) text = $"[SUB]{text}[/SUB]";
+            if (run.Hidden) text = $"[HIDDEN]{text}[/HIDDEN]";
+            if (run.SmallCaps) text = $"[SC]{text}[/SC]";
+            if (run.AllCaps) text = $"[CAPS]{text}[/CAPS]";
 
             sb.Append(text);
         }

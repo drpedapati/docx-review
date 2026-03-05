@@ -10,7 +10,7 @@
 #   make clean        # Remove build artifacts
 
 BINARY_NAME  := docx-review
-VERSION      := 1.4.0
+VERSION      := 1.4.1
 BUILD_DIR    := build
 INSTALL_DIR  := /usr/local/bin
 GH_REPO      := drpedapati/docx-review
