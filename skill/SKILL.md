@@ -1,11 +1,11 @@
 ---
 name: docx-review
-description: "Read, edit, and diff Word documents (.docx) with tracked changes and comments using the docx-review CLI — a .NET 8 tool built on Microsoft's Open XML SDK. Ships as a single 12MB native binary (no runtime). Use when: (1) Adding tracked changes (replace, delete, insert) to a .docx, (2) Adding anchored comments to a .docx, (3) Reading/extracting text, tracked changes, comments, and metadata from a .docx, (4) Diffing two .docx files semantically, (5) Responding to peer reviewer comments with tracked revisions, (6) Proofreading or revising manuscripts with reviewable output, (7) Any task requiring valid tracked-change .docx output with proper w:del/w:ins markup that renders natively in Word."
+description: "Read, edit, create, and diff Word documents (.docx) with tracked changes and comments using the docx-review CLI v1.4.1 — a .NET 8 tool built on Microsoft's Open XML SDK. Ships as a single 12MB native binary (no runtime). Use when: (1) Adding tracked changes (replace, delete, insert) to a .docx, (2) Adding or updating anchored comments to a .docx, (3) Reading/extracting text, tracked changes, comments, and metadata from a .docx, (4) Diffing two .docx files semantically, (5) Creating new documents from templates, (6) Responding to peer reviewer comments with tracked revisions, (7) Proofreading or revising manuscripts with reviewable output, (8) Any task requiring valid tracked-change .docx output with proper w:del/w:ins markup that renders natively in Word."
 ---
 
-# docx-review
+# docx-review v1.4.1
 
-CLI tool for Word document review: tracked changes, comments, read, diff, and git integration. Built on Microsoft's Open XML SDK — 100% compatible tracked changes and comments.
+CLI tool for Word document review: tracked changes, comments, read, create, diff, and git integration. Built on Microsoft's Open XML SDK — 100% compatible tracked changes and comments.
 
 ## Install
 
@@ -17,10 +17,13 @@ Binary: `/opt/homebrew/bin/docx-review` (12MB, self-contained, no runtime)
 
 Verify: `docx-review --version`
 
-## Workflow Choice (sciClaw integration)
+## Workflow Decision Tree
 
-- For new clean manuscripts: `pandoc manuscript.md -o manuscript.docx`
-- For tracked review edits/comments on existing documents: use `docx-review`
+- **Reading/extracting content?** → `docx-review input.docx --read --json`
+- **Adding tracked changes or comments?** → Build JSON manifest → `scripts/review_pipeline.sh`
+- **Creating new document?** → `docx-review --create -o output.docx`
+- **Comparing two versions?** → `docx-review --diff old.docx new.docx`
+- **New clean manuscript from markdown?** → `pandoc manuscript.md -o manuscript.docx` (not docx-review)
 
 ## Modes
 
@@ -34,7 +37,10 @@ docx-review input.docx edits.json -o reviewed.docx --json    # structured output
 docx-review input.docx edits.json --dry-run --json           # validate without modifying
 cat edits.json | docx-review input.docx -o reviewed.docx     # stdin pipe
 docx-review input.docx edits.json -o reviewed.docx --author "Dr. Smith"
+docx-review input.docx edits.json -o reviewed.docx --no-accept-existing  # preserve prior tracked changes
 ```
+
+By default, existing tracked changes are accepted before applying new edits (`--accept-existing`). This aligns the text view with the reader's "accepted" view and dramatically improves match rates on previously-edited documents. Use `--no-accept-existing` for multi-reviewer workflows where prior edits must be preserved.
 
 ### Read: Extract document content as JSON
 
@@ -42,7 +48,15 @@ docx-review input.docx edits.json -o reviewed.docx --author "Dr. Smith"
 docx-review input.docx --read --json
 ```
 
-Returns: paragraphs (with styles), tracked changes (type/text/author/date), comments (anchor text/content/author), metadata (title/author/word count/revision), and summary statistics.
+Returns: paragraphs (with styles), tracked changes (type/text/author/date), comments (anchor text/content/author), metadata (title/author/word count/revision), and summary statistics. For output schema, see `references/read-schema.md`.
+
+### Create: Generate new documents from template
+
+```bash
+docx-review --create -o new.docx                        # blank NIH template
+docx-review --create -o new.docx populate.json          # populate template sections
+docx-review --create -o new.docx --template custom.docx # use custom template
+```
 
 ### Diff: Semantic comparison of two documents
 
@@ -60,9 +74,11 @@ docx-review --textconv document.docx    # normalized text output
 docx-review --git-setup                 # print .gitattributes/.gitconfig instructions
 ```
 
+Textconv inline markers: `[B]`/`[I]`/`[U]` (formatting), `[-deleted-]`/`[+inserted+]` (tracked changes), `/* [Author] text */` (comments), `[SUP]`/`[SUB]` (super/subscript), `[SC]`/`[CAPS]` (small caps/all caps), `[HIDDEN]` (hidden text), `[^N]` (footnote/endnote refs), `[IMG: name (hash)]` (images), `\t` (tabs).
+
 ## JSON Manifest Format
 
-This is the edit contract. Build this JSON, pass it to `docx-review`.
+Build this JSON, pass it to `docx-review`.
 
 ```json
 {
@@ -74,7 +90,8 @@ This is the edit contract. Build this JSON, pass it to `docx-review`.
     { "type": "insert_before", "anchor": "exact anchor text", "text": "text to insert before" }
   ],
   "comments": [
-    { "anchor": "exact text to attach comment to", "text": "Comment content" }
+    { "anchor": "exact text to attach comment to", "text": "Comment content" },
+    { "op": "update", "id": 12, "text": "Updated comment text" }
   ]
 }
 ```
@@ -90,10 +107,54 @@ This is the edit contract. Build this JSON, pass it to `docx-review`.
 
 ### Critical rules for `find` and `anchor` text
 
-1. **Must be exact copy-paste from the document.** The tool does ordinal string matching.
+1. **Must be exact copy-paste from the document.** The tool tries exact ordinal match first, then falls back to whitespace-flexible matching (treats any whitespace run including NBSP as equivalent).
 2. **Include enough context for uniqueness** — 15+ words when the phrase is common.
 3. **First occurrence wins.** The tool replaces/anchors at the first match only.
-4. Use `--dry-run --json` to validate all matches before applying.
+4. Always validate with `--dry-run --json` before applying.
+
+### Concrete example
+
+Given a document containing: *"The study enrolled 30 patients with moderate to severe symptoms over a 12-month period at three clinical sites."*
+
+```json
+{
+  "author": "Dr. Smith",
+  "changes": [
+    {
+      "type": "replace",
+      "find": "The study enrolled 30 patients with moderate to severe symptoms over a 12-month period",
+      "replace": "The study enrolled 45 patients with moderate to severe symptoms over an 18-month period"
+    }
+  ],
+  "comments": [
+    {
+      "anchor": "three clinical sites",
+      "text": "Please confirm the number of sites — the methods section mentions four."
+    }
+  ]
+}
+```
+
+Note: `find` includes enough surrounding text (15+ words) for a unique match. The `anchor` for the comment uses the specific phrase being questioned.
+
+## Helper Scripts
+
+### `scripts/validate_manifest.sh`
+
+Dry-run validation with human-readable pass/fail summary. Run before applying edits.
+
+```bash
+scripts/validate_manifest.sh manuscript.docx edits.json
+# Output: 8/8 edits matched
+```
+
+### `scripts/review_pipeline.sh`
+
+Full pipeline: validate → apply → report output path. Aborts on validation failure.
+
+```bash
+scripts/review_pipeline.sh manuscript.docx edits.json reviewed.docx
+```
 
 ## JSON Output (--json)
 
@@ -116,91 +177,16 @@ This is the edit contract. Build this JSON, pass it to `docx-review`.
 
 Exit code 0 = all succeeded. Exit code 1 = at least one failed (partial success possible).
 
-## Workflow: AI-Assisted Document Revision
+## Key Behaviors
 
-Standard pattern for using docx-review with AI-generated edits:
-
-### Step 1: Extract text
-
-```bash
-docx-review manuscript.docx --read --json > doc_content.json
-```
-
-Or use pandoc for markdown extraction:
-
-```bash
-pandoc manuscript.docx -t markdown -o manuscript.md
-```
-
-### Step 2: Generate the manifest
-
-Feed the extracted text + instructions to the AI. Request output as a docx-review JSON manifest.
-
-Use this system context when prompting for manifest generation:
-
-```
-Generate a JSON edit manifest for docx-review. Output format:
-{
-  "author": "...",
-  "changes": [{"type": "replace|delete|insert_after|insert_before", ...}],
-  "comments": [{"anchor": "...", "text": "..."}]
-}
-CRITICAL: "find" and "anchor" values must be EXACT text from the document.
-Include 15+ words of surrounding context for uniqueness. First match wins.
-```
-
-### Step 3: Validate with dry run
-
-```bash
-docx-review manuscript.docx manifest.json --dry-run --json
-```
-
-Check for failures. If any edits fail (`"success": false`), fix the manifest (usually the `find`/`anchor` text doesn't match exactly) and retry.
-
-### Step 4: Apply
-
-```bash
-docx-review manuscript.docx manifest.json -o manuscript_reviewed.docx --json
-```
-
-### Step 5: Verify (optional)
-
-```bash
-docx-review manuscript_reviewed.docx --read --json | jq '.summary'
-docx-review --diff manuscript.docx manuscript_reviewed.docx
-```
-
-## Workflow: Peer Review Response
-
-For addressing reviewer comments on a manuscript:
-
-1. Extract manuscript text (`--read --json` or pandoc)
-2. Build manifest addressing each reviewer point — use `replace` for text changes, `comments` to explain changes to the author
-3. Dry-run validate
-4. Apply edits
-5. The output `.docx` has tracked changes the author can review in Word
-
-## Workflow: Proofreading
-
-1. Extract text
-2. Generate manifest with grammar/style fixes as `replace` changes and suggestions as `comments`
-3. Validate + apply
-4. Author opens in Word, accepts/rejects each change individually
-
-## Key behaviors
-
+- **Existing tracked changes accepted by default.** Before applying new edits, all prior tracked changes are accepted so the text view matches the reader's view. Override with `--no-accept-existing`.
+- **Whitespace-flexible matching.** Exact ordinal match tried first; if that fails, falls back to a regex that normalizes whitespace runs (spaces, NBSP, tabs). Compiled regexes are cached.
 - **Comments applied first**, then tracked changes. Ensures anchors resolve before XML is modified.
 - **Formatting preserved.** RunProperties cloned from source runs onto both deleted and inserted text.
 - **Multi-run text matching.** Text spanning multiple XML `<w:r>` elements (common in previously edited documents) is found and handled correctly.
 - **Everything untouched is preserved.** Images, charts, bibliographies, footnotes, cross-references, styles, headers/footers survive intact.
 
-## Read mode output structure
-
-For programmatic processing of `--read --json` output, see `references/read-schema.md`.
-
-## Companion tools
-
-The CinciNeuro Open XML SDK ecosystem:
+## Companion Tools
 
 | Tool | Install | Purpose |
 |------|---------|---------|
