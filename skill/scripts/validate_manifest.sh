@@ -17,7 +17,7 @@ if ! command -v docx-review &>/dev/null; then
   exit 2
 fi
 
-RESULT=$(docx-review "$INPUT" "$MANIFEST" --dry-run --json 2>&1)
+RESULT=$(docx-review "$INPUT" "$MANIFEST" --dry-run --json 2>&1 || true)
 echo "$RESULT" | python3 -c "
 import json, sys
 data = json.load(sys.stdin)

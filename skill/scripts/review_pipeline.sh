@@ -19,7 +19,7 @@ if ! command -v docx-review &>/dev/null; then
 fi
 
 echo "==> Validating manifest (dry run)..."
-DRY=$(docx-review "$INPUT" "$MANIFEST" --dry-run --json 2>&1)
+DRY=$(docx-review "$INPUT" "$MANIFEST" --dry-run --json 2>&1 || true)
 CHANGES=$(echo "$DRY" | python3 -c "import json,sys; d=json.load(sys.stdin); print(f'{d[\"changes_succeeded\"]}/{d[\"changes_attempted\"]} changes, {d[\"comments_succeeded\"]}/{d[\"comments_attempted\"]} comments')")
 echo "    $CHANGES"
 
