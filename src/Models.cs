@@ -52,6 +52,12 @@ public class Change
 
     [JsonPropertyName("text")]
     public string? Text { get; set; }
+
+    [JsonPropertyName("format")]
+    public string? Format { get; set; }
+
+    [JsonPropertyName("style")]
+    public string? Style { get; set; }
 }
 
 /// <summary>
