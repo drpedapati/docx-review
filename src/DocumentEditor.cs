@@ -41,7 +41,7 @@ public class DocumentEditor
         };
 
         bool inPlaceMode = false;
-        bool succeeded = false;
+        bool replaceOriginalOnSuccess = false;
 
         string workPath;
         if (dryRun)
@@ -212,14 +212,25 @@ public class DocumentEditor
                     }
 
                     result.Results.Add(er);
-                    if (er.Success) result.ChangesSucceeded++;
+                    if (er.Success)
+                    {
+                        result.ChangesSucceeded++;
+
+                        // Rebuild the paragraph snapshot so later operations can
+                        // target paragraphs created by earlier multi-line edits.
+                        if (!dryRun)
+                            paragraphs = body.Elements<Paragraph>().ToList();
+                    }
                 }
             }
+
+            result.Success = result.ChangesSucceeded == result.ChangesAttempted
+                          && result.CommentsSucceeded == result.CommentsAttempted;
 
             if (!dryRun)
                 doc.MainDocumentPart!.Document.Save();
 
-            succeeded = true;
+            replaceOriginalOnSuccess = result.Success;
         }
         finally
         {
@@ -229,15 +240,12 @@ public class DocumentEditor
             }
             else if (inPlaceMode && File.Exists(workPath))
             {
-                if (succeeded)
+                if (replaceOriginalOnSuccess)
                     File.Move(workPath, outputPath, true);
                 else
                     File.Delete(workPath);
             }
         }
-
-        result.Success = result.ChangesSucceeded == result.ChangesAttempted
-                      && result.CommentsSucceeded == result.CommentsAttempted;
 
         return result;
     }
@@ -588,15 +596,38 @@ public class DocumentEditor
                 splitPos = idx;
             }
 
-            // Skip if target run is inside a prior tracked insertion
-            if (targetEntry.insideIns) continue;
-
             var rPr = targetEntry.rPr;
             var targetRun = targetEntry.run;
 
             // Include \n for <w:br/> elements so split position is correct
             string fullText = GetFullRunText(targetRun);
             int localSplit = splitPos - targetEntry.start;
+
+            if (targetEntry.insideIns)
+            {
+                if (targetRun.Parent is not InsertedRun insertedWrapper || insertedWrapper.Parent != para)
+                    continue;
+
+                // Allow chaining inserts against paragraphs created earlier in the
+                // same manifest when the insertion point falls at the edge of a
+                // tracked insertion wrapper.
+                bool atWrapperStart = localSplit == 0 && targetRun.PreviousSibling() == null;
+                bool atWrapperEnd = localSplit == fullText.Length && targetRun.NextSibling() == null;
+
+                if (!after && atWrapperStart)
+                {
+                    InsertTrackedTextAtElementBoundary(para, insertedWrapper, text, afterSibling: false, rPr, format, style);
+                    return 1;
+                }
+
+                if (after && atWrapperEnd)
+                {
+                    InsertTrackedTextAtElementBoundary(para, insertedWrapper, text, afterSibling: true, rPr, format, style);
+                    return 1;
+                }
+
+                continue;
+            }
 
             string beforeSplit = fullText.Substring(0, localSplit);
             string afterSplit = fullText.Substring(localSplit);
@@ -973,6 +1004,24 @@ public class DocumentEditor
         }
 
         return currentPara;
+    }
+
+    private Paragraph InsertTrackedTextAtElementBoundary(
+        Paragraph para,
+        OpenXmlElement sibling,
+        string text,
+        bool afterSibling,
+        RunProperties? rPr,
+        string? format = null,
+        string? style = null)
+    {
+        var placeholder = new Run();
+        if (afterSibling)
+            sibling.InsertAfterSelf(placeholder);
+        else
+            sibling.InsertBeforeSelf(placeholder);
+
+        return InsertTrackedTextAtPlaceholder(para, placeholder, text, rPr, format, style);
     }
 
     private static void EnsureCommentsPart(WordprocessingDocument doc)

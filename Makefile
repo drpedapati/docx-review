@@ -47,7 +47,7 @@ RELEASE_ASSETS := \
   $(BUILD_DIR)/$(BINARY_NAME)-linux-amd64 \
   $(BUILD_DIR)/$(BINARY_NAME)-linux-arm64
 
-.PHONY: build install all docker test test-create test-comment-update clean help release release-assets update-taps
+.PHONY: build install all docker test test-create test-comment-update test-edit-regressions clean help release release-assets update-taps
 
 ## build: Build single-file binary for current platform
 build:
@@ -128,6 +128,10 @@ test-create: build
 ## test-comment-update: Integration test for comment update op by ID
 test-comment-update:
 	@bash tests/test-comment-update.sh
+
+## test-edit-regressions: Integration tests for in-place safety and chained multi-paragraph edits
+test-edit-regressions:
+	@bash tests/test-edit-regressions.sh
 
 ## release: Build all platforms, create GitHub release, update Homebrew taps
 release: all release-assets
