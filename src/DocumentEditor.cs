@@ -40,11 +40,32 @@ public class DocumentEditor
             CommentsAttempted = manifest.Comments?.Count ?? 0
         };
 
-        if (!dryRun)
-            File.Copy(inputPath, outputPath, true);
+        bool inPlaceMode = false;
+        bool replaceOriginalOnSuccess = false;
 
-        // For dry-run, open a temp copy read-only-ish to check matches
-        string workPath = dryRun ? CreateTempCopy(inputPath) : outputPath;
+        string workPath;
+        if (dryRun)
+        {
+            workPath = CreateTempCopy(inputPath);
+        }
+        else
+        {
+            bool sameFile = string.Equals(
+                Path.GetFullPath(inputPath),
+                Path.GetFullPath(outputPath),
+                StringComparison.OrdinalIgnoreCase);
+
+            if (sameFile)
+            {
+                workPath = CreateTempCopy(inputPath);
+                inPlaceMode = true;
+            }
+            else
+            {
+                File.Copy(inputPath, outputPath, true);
+                workPath = outputPath;
+            }
+        }
 
         try
         {
@@ -191,21 +212,40 @@ public class DocumentEditor
                     }
 
                     result.Results.Add(er);
-                    if (er.Success) result.ChangesSucceeded++;
+                    if (er.Success)
+                    {
+                        result.ChangesSucceeded++;
+
+                        // Rebuild the paragraph snapshot so later operations can
+                        // target paragraphs created by earlier multi-line edits.
+                        if (!dryRun)
+                            paragraphs = body.Elements<Paragraph>().ToList();
+                    }
                 }
             }
 
+            result.Success = result.ChangesSucceeded == result.ChangesAttempted
+                          && result.CommentsSucceeded == result.CommentsAttempted;
+
             if (!dryRun)
                 doc.MainDocumentPart!.Document.Save();
+
+            replaceOriginalOnSuccess = result.Success;
         }
         finally
         {
             if (dryRun && File.Exists(workPath))
+            {
                 File.Delete(workPath);
+            }
+            else if (inPlaceMode && File.Exists(workPath))
+            {
+                if (replaceOriginalOnSuccess)
+                    File.Move(workPath, outputPath, true);
+                else
+                    File.Delete(workPath);
+            }
         }
-
-        result.Success = result.ChangesSucceeded == result.ChangesAttempted
-                      && result.CommentsSucceeded == result.CommentsAttempted;
 
         return result;
     }
@@ -240,7 +280,7 @@ public class DocumentEditor
             return er;
         }
 
-        int n = ReplaceWithTracking(paragraphs, change.Find, change.Replace);
+        int n = ReplaceWithTracking(paragraphs, change.Find, change.Replace, change.Format, change.Style);
         er.Success = n > 0;
         er.Message = n > 0 ? "Replaced" : $"No match for: \"{Truncate(change.Find, 60)}\"";
         return er;
@@ -302,7 +342,7 @@ public class DocumentEditor
             return er;
         }
 
-        int n = InsertWithTracking(paragraphs, change.Anchor, change.Text, after);
+        int n = InsertWithTracking(paragraphs, change.Anchor, change.Text, after, change.Format, change.Style);
         er.Success = n > 0;
         er.Message = n > 0
             ? $"Inserted {(after ? "after" : "before")} anchor"
@@ -363,7 +403,7 @@ public class DocumentEditor
     /// Creates w:del (DeletedRun) and w:ins (InsertedRun) elements.
     /// Handles text spanning multiple XML runs and preserves formatting.
     /// </summary>
-    private int ReplaceWithTracking(List<Paragraph> paragraphs, string find, string replace)
+    private int ReplaceWithTracking(List<Paragraph> paragraphs, string find, string replace, string? format = null, string? style = null)
     {
         foreach (var para in paragraphs)
         {
@@ -424,29 +464,23 @@ public class DocumentEditor
             del.Append(delRun);
             para.InsertBefore(del, insertPoint);
 
-            // w:ins
-            var ins = new InsertedRun()
-            {
-                Author = new StringValue(_author),
-                Date = new DateTimeValue(DateTime.Parse(_dateStr)),
-                Id = (_revId++).ToString()
-            };
-            var insRun = new Run();
-            if (rPr != null) insRun.Append(rPr.CloneNode(true));
-            insRun.Append(new Text(replace) { Space = SpaceProcessingModeValues.Preserve });
-            ins.Append(insRun);
-            para.InsertBefore(ins, insertPoint);
-
+            // Place suffix AFTER the last affected run so it becomes trailing content
             if (suffix.Length > 0)
             {
                 var suffixRun = new Run();
                 if (rPr != null) suffixRun.Append(rPr.CloneNode(true));
                 suffixRun.Append(new Text(suffix) { Space = SpaceProcessingModeValues.Preserve });
-                para.InsertBefore(suffixRun, insertPoint);
+                affected.Last().run.InsertAfterSelf(suffixRun);
             }
 
+            // Remove all affected runs except insertPoint (used as placeholder)
             foreach (var (run, _, _, _, _) in affected)
-                run.Remove();
+                if (run != insertPoint) run.Remove();
+
+            // Insert tracked replacement text (may split into multiple paragraphs)
+            // insertPoint acts as placeholder: helper inserts w:ins before it,
+            // moves trailing content to last new paragraph, removes insertPoint.
+            InsertTrackedTextAtPlaceholder(para, insertPoint, replace, rPr, format, style);
 
             return 1;
         }
@@ -536,7 +570,7 @@ public class DocumentEditor
     /// <summary>
     /// Insert text before or after an anchor with tracked insertion (w:ins).
     /// </summary>
-    private int InsertWithTracking(List<Paragraph> paragraphs, string anchor, string text, bool after)
+    private int InsertWithTracking(List<Paragraph> paragraphs, string anchor, string text, bool after, string? format = null, string? style = null)
     {
         foreach (var para in paragraphs)
         {
@@ -562,15 +596,38 @@ public class DocumentEditor
                 splitPos = idx;
             }
 
-            // Skip if target run is inside a prior tracked insertion
-            if (targetEntry.insideIns) continue;
-
             var rPr = targetEntry.rPr;
             var targetRun = targetEntry.run;
 
             // Include \n for <w:br/> elements so split position is correct
             string fullText = GetFullRunText(targetRun);
             int localSplit = splitPos - targetEntry.start;
+
+            if (targetEntry.insideIns)
+            {
+                if (targetRun.Parent is not InsertedRun insertedWrapper || insertedWrapper.Parent != para)
+                    continue;
+
+                // Allow chaining inserts against paragraphs created earlier in the
+                // same manifest when the insertion point falls at the edge of a
+                // tracked insertion wrapper.
+                bool atWrapperStart = localSplit == 0 && targetRun.PreviousSibling() == null;
+                bool atWrapperEnd = localSplit == fullText.Length && targetRun.NextSibling() == null;
+
+                if (!after && atWrapperStart)
+                {
+                    InsertTrackedTextAtElementBoundary(para, insertedWrapper, text, afterSibling: false, rPr, format, style);
+                    return 1;
+                }
+
+                if (after && atWrapperEnd)
+                {
+                    InsertTrackedTextAtElementBoundary(para, insertedWrapper, text, afterSibling: true, rPr, format, style);
+                    return 1;
+                }
+
+                continue;
+            }
 
             string beforeSplit = fullText.Substring(0, localSplit);
             string afterSplit = fullText.Substring(localSplit);
@@ -584,27 +641,19 @@ public class DocumentEditor
                 para.InsertBefore(beforeRun, targetRun);
             }
 
-            var ins = new InsertedRun()
-            {
-                Author = new StringValue(_author),
-                Date = new DateTimeValue(DateTime.Parse(_dateStr)),
-                Id = (_revId++).ToString()
-            };
-            var insRun = new Run();
-            if (rPr != null) insRun.Append(rPr.CloneNode(true));
-            insRun.Append(new Text(text) { Space = SpaceProcessingModeValues.Preserve });
-            ins.Append(insRun);
-            para.InsertBefore(ins, targetRun);
-
+            // Place afterSplit AFTER targetRun so it becomes trailing content
             if (afterSplit.Length > 0)
             {
                 var afterRun = new Run();
                 if (rPr != null) afterRun.Append(rPr.CloneNode(true));
                 afterRun.Append(new Text(afterSplit) { Space = SpaceProcessingModeValues.Preserve });
-                para.InsertBefore(afterRun, targetRun);
+                targetRun.InsertAfterSelf(afterRun);
             }
 
-            targetRun.Remove();
+            // Insert tracked text (may split into multiple paragraphs)
+            // targetRun acts as placeholder: helper inserts w:ins before it,
+            // moves trailing content to last new paragraph, removes targetRun.
+            InsertTrackedTextAtPlaceholder(para, targetRun, text, rPr, format, style);
             return 1;
         }
         return 0;
@@ -809,6 +858,170 @@ public class DocumentEditor
                 sb.Append('\n');
         }
         return sb.ToString();
+    }
+
+    /// <summary>
+    /// Clone ParagraphProperties from a paragraph, removing any SectionProperties
+    /// child. SectionProperties must remain only on the last paragraph of a section
+    /// and must not be duplicated onto inserted paragraphs.
+    /// </summary>
+    private static ParagraphProperties? CloneParagraphPropertiesWithoutSectPr(Paragraph para)
+    {
+        var pPr = para.ParagraphProperties;
+        if (pPr == null) return null;
+
+        var cloned = (ParagraphProperties)pPr.CloneNode(true);
+        var sectPr = cloned.GetFirstChild<SectionProperties>();
+        sectPr?.Remove();
+        return cloned;
+    }
+
+    private record FormattedSegment(string Text, bool Bold, bool Italic);
+
+    private static List<FormattedSegment> ParseFormattedSegments(string text)
+    {
+        var segments = new List<FormattedSegment>();
+        var pattern = new Regex(@"(\*\*(.+?)\*\*)|(\*(.+?)\*)|([^*]+)");
+        foreach (Match m in pattern.Matches(text))
+        {
+            if (m.Groups[2].Success)
+                segments.Add(new FormattedSegment(m.Groups[2].Value, Bold: true, Italic: false));
+            else if (m.Groups[4].Success)
+                segments.Add(new FormattedSegment(m.Groups[4].Value, Bold: false, Italic: true));
+            else
+                segments.Add(new FormattedSegment(m.Value, Bold: false, Italic: false));
+        }
+        return segments;
+    }
+
+    /// <summary>
+    /// Create a tracked insertion run (w:ins containing w:r elements) with the given text.
+    /// When format is "markdown", parses **bold** and *italic* into separate runs.
+    /// </summary>
+    private InsertedRun CreateTrackedInsertionRun(string lineText, RunProperties? rPr, string? format = null)
+    {
+        var ins = new InsertedRun()
+        {
+            Author = new StringValue(_author),
+            Date = new DateTimeValue(DateTime.Parse(_dateStr)),
+            Id = (_revId++).ToString()
+        };
+
+        if (format == "markdown")
+        {
+            var segments = ParseFormattedSegments(lineText);
+            foreach (var seg in segments)
+            {
+                var run = new Run();
+                var segRPr = rPr != null ? (RunProperties)rPr.CloneNode(true) : new RunProperties();
+                if (seg.Bold)
+                    segRPr.Append(new Bold());
+                if (seg.Italic)
+                    segRPr.Append(new Italic());
+                if (segRPr.HasChildren)
+                    run.Append(segRPr);
+                run.Append(new Text(seg.Text) { Space = SpaceProcessingModeValues.Preserve });
+                ins.Append(run);
+            }
+        }
+        else
+        {
+            var run = new Run();
+            if (rPr != null) run.Append(rPr.CloneNode(true));
+            run.Append(new Text(lineText) { Space = SpaceProcessingModeValues.Preserve });
+            ins.Append(run);
+        }
+        return ins;
+    }
+
+    /// <summary>
+    /// Insert tracked text (w:ins) that may span multiple paragraphs.
+    /// Replaces <paramref name="placeholder"/> with w:ins markup. For multi-line
+    /// text (\n), new sibling paragraphs are created after the source paragraph.
+    /// Content following the placeholder is moved to the last new paragraph.
+    /// Returns the last paragraph created (or the original if single-line).
+    /// </summary>
+    private Paragraph InsertTrackedTextAtPlaceholder(
+        Paragraph para,
+        OpenXmlElement placeholder,
+        string text,
+        RunProperties? rPr,
+        string? format = null,
+        string? style = null)
+    {
+        string[] lines = text.Split('\n');
+
+        // First line: insert w:ins before placeholder in current paragraph
+        var firstIns = CreateTrackedInsertionRun(lines[0], rPr, format);
+        para.InsertBefore(firstIns, placeholder);
+
+        if (lines.Length == 1)
+        {
+            // Single line: remove placeholder, everything stays in para
+            placeholder.Remove();
+            return para;
+        }
+
+        // Multi-line: collect everything after placeholder (moves to last new paragraph)
+        var trailingContent = new List<OpenXmlElement>();
+        for (var sib = placeholder.NextSibling(); sib != null; sib = sib.NextSibling())
+            trailingContent.Add(sib);
+
+        // Remove placeholder
+        placeholder.Remove();
+
+        // Clone pPr without sectPr
+        ParagraphProperties? clonedPPr = CloneParagraphPropertiesWithoutSectPr(para);
+
+        // Create new paragraphs for lines[1..n]
+        Paragraph currentPara = para;
+        for (int i = 1; i < lines.Length; i++)
+        {
+            var newPara = new Paragraph();
+            if (clonedPPr != null)
+                newPara.Append(clonedPPr.CloneNode(true));
+
+            // Override paragraph style if requested
+            if (style != null)
+            {
+                var pPr = newPara.GetFirstChild<ParagraphProperties>()
+                    ?? newPara.PrependChild(new ParagraphProperties());
+                pPr.ParagraphStyleId = new ParagraphStyleId() { Val = style };
+            }
+
+            var newIns = CreateTrackedInsertionRun(lines[i], rPr, format);
+            newPara.Append(newIns);
+
+            currentPara.InsertAfterSelf(newPara);
+            currentPara = newPara;
+        }
+
+        // Move trailing content to the last new paragraph
+        foreach (var elem in trailingContent)
+        {
+            elem.Remove();
+            currentPara.Append(elem);
+        }
+
+        return currentPara;
+    }
+
+    private Paragraph InsertTrackedTextAtElementBoundary(
+        Paragraph para,
+        OpenXmlElement sibling,
+        string text,
+        bool afterSibling,
+        RunProperties? rPr,
+        string? format = null,
+        string? style = null)
+    {
+        var placeholder = new Run();
+        if (afterSibling)
+            sibling.InsertAfterSelf(placeholder);
+        else
+            sibling.InsertBeforeSelf(placeholder);
+
+        return InsertTrackedTextAtPlaceholder(para, placeholder, text, rPr, format, style);
     }
 
     private static void EnsureCommentsPart(WordprocessingDocument doc)

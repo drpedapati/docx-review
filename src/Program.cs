@@ -15,6 +15,7 @@ class Program
         string? author = null;
         bool jsonOutput = false;
         bool dryRun = false;
+        bool inPlace = false;
         bool readMode = false;
         bool diffMode = false;
         bool textConvMode = false;
@@ -46,6 +47,10 @@ class Program
                     break;
                 case "--dry-run":
                     dryRun = true;
+                    break;
+                case "-i":
+                case "--in-place":
+                    inPlace = true;
                     break;
                 case "--read":
                     readMode = true;
@@ -276,6 +281,13 @@ class Program
             }
         }
 
+        // Validate --in-place conflicts
+        if (inPlace && outputPath != null)
+        {
+            Error("--in-place and --output are mutually exclusive");
+            return 1;
+        }
+
         // ── Edit mode (original behavior) ─────────────────────────
         // Read manifest from file or stdin
         string manifestJson;
@@ -301,9 +313,16 @@ class Program
         // Default output path
         if (outputPath == null && !dryRun)
         {
-            string dir = Path.GetDirectoryName(inputPath) ?? ".";
-            string name = Path.GetFileNameWithoutExtension(inputPath);
-            outputPath = Path.Combine(dir, $"{name}_reviewed.docx");
+            if (inPlace)
+            {
+                outputPath = inputPath;
+            }
+            else
+            {
+                string dir = Path.GetDirectoryName(inputPath) ?? ".";
+                string name = Path.GetFileNameWithoutExtension(inputPath);
+                outputPath = Path.Combine(dir, $"{name}_reviewed.docx");
+            }
         }
 
         // Deserialize manifest (using source-generated context for trim/AOT safety)
@@ -376,6 +395,7 @@ Diff & Git Integration:
 Read/Write Options:
   --read                 Read mode: extract tracked changes, comments, metadata
   -o, --output <path>    Output file path (default: <input>_reviewed.docx)
+  -i, --in-place         Edit the input file in place (mutually exclusive with -o)
   --author <name>        Reviewer name (overrides manifest author)
   --json                 Output results as JSON
   --dry-run              Validate manifest without modifying
