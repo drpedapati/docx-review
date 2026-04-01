@@ -1,0 +1,100 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "cross_chunk_comments",
+    "review_letter"
+  ],
+  "properties": {
+    "cross_chunk_comments": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "anchor",
+          "text",
+          "category"
+        ],
+        "properties": {
+          "anchor": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          },
+          "category": {
+            "type": "string",
+            "enum": [
+              "terminology",
+              "consistency",
+              "logic",
+              "structure",
+              "tone",
+              "cross_reference"
+            ]
+          }
+        }
+      }
+    },
+    "review_letter": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "overall_assessment",
+        "key_findings",
+        "recommendations"
+      ],
+      "properties": {
+        "overall_assessment": {
+          "type": "string"
+        },
+        "key_findings": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "category",
+              "description"
+            ],
+            "properties": {
+              "category": {
+                "type": "string"
+              },
+              "description": {
+                "type": "string"
+              },
+              "severity": {
+                "type": "string",
+                "enum": [
+                  "high",
+                  "medium",
+                  "low"
+                ]
+              }
+            }
+          }
+        },
+        "highlights": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "concerns": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "recommendations": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}
