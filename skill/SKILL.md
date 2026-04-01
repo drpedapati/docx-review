@@ -63,6 +63,7 @@ Confirm each inserted item is its own paragraph (not crammed into one) and the t
 
 ## Workflow Decision Tree
 
+- **Automated review/proofread?** → `docx-review input.docx --review <mode> -o reviewed.docx` (no manifest needed)
 - **Reading/extracting content?** → `docx-review input.docx --read --json`
 - **Adding tracked changes or comments?** → Read first (Step 1 above) → Build JSON manifest → validate → apply
 - **Creating new document?** → `docx-review --create -o output.docx`
@@ -70,6 +71,41 @@ Confirm each inserted item is its own paragraph (not crammed into one) and the t
 - **New clean manuscript from markdown?** → `pandoc manuscript.md -o manuscript.docx` (not docx-review)
 
 ## Modes
+
+### Review: Automated LLM-powered document review
+
+Runs a full review pipeline — no manifest needed. Requires `DOCX_REVIEW_API_KEY` or `OPENAI_API_KEY` env var.
+
+```bash
+# Peer review — formal review with major/minor comments and recommendation
+docx-review manuscript.docx --review peer_review -o reviewed.docx
+
+# Proofread — spelling, grammar, punctuation, consistency fixes
+docx-review manuscript.docx --review proofread -o proofread.docx
+
+# Substantive edit — deep structural and content review
+docx-review manuscript.docx --review substantive -o edited.docx
+
+# With custom profile and additional instructions
+docx-review manuscript.docx --review proofread --profile medical --instructions "Use AMA style" -o proofread.docx
+
+# Dry run (structure analysis and chunking only, no LLM review)
+docx-review manuscript.docx --review peer_review --dry-run --json
+```
+
+**Three review modes:**
+
+| Mode | Focus | Output |
+|------|-------|--------|
+| `proofread` | Spelling, grammar, punctuation, consistency, awkward phrasing | Tracked changes + copy editor's summary |
+| `substantive` | Structure, argument, clarity, content gaps, tone | Tracked changes + comments + editorial letter |
+| `peer_review` | Methodology, claims, reproducibility, cross-section consistency | Comments + formal review letter with recommendation |
+
+**Document profiles** (auto-detected or manual): `medical`, `regulatory`, `reference`, `legal`, `contract`, `general`
+
+**Outputs:** `<output>.docx` (tracked changes), `<output>.review-letter.md`, `<output>.review-summary.json`
+
+**Custom endpoint:** Set `DOCX_REVIEW_BASE_URL` for OpenAI-compatible proxies. Auto-detects Responses API vs Chat Completions.
 
 ### Edit: Apply tracked changes and comments
 

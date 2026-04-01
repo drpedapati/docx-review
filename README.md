@@ -66,10 +66,83 @@ docx-review --create -o manuscript.docx
 docx-review --create -o manuscript.docx populate.json --json
 ```
 
+### Automated Review Mode
+
+Run a full LLM-powered document review with a single command. Produces a reviewed `.docx` with tracked changes and comments, a Markdown review letter, and a JSON summary.
+
+```bash
+# Peer review — formal review with major/minor comments and recommendation
+docx-review manuscript.docx --review peer_review -o reviewed.docx
+
+# Proofread — spelling, grammar, punctuation, consistency
+docx-review manuscript.docx --review proofread -o proofread.docx
+
+# Substantive edit — deep structural and content review
+docx-review manuscript.docx --review substantive -o edited.docx
+```
+
+Requires an OpenAI-compatible API key. Set via environment variable:
+
+```bash
+export DOCX_REVIEW_API_KEY="your-api-key"
+# Or use an OpenAI key directly:
+export OPENAI_API_KEY="sk-..."
+
+# Custom endpoint (OpenAI-compatible proxy):
+export DOCX_REVIEW_BASE_URL="https://your-proxy.example.com/v1"
+```
+
+**Review pipeline stages:**
+
+1. **Extract** — reads document text and existing tracked changes/comments
+2. **Structure analysis** — LLM classifies document type, study design, reporting standard (e.g., CONSORT, STROBE)
+3. **Section-aware chunking** — splits by IMRaD sections; 8K chars for proofread, 24K for others
+4. **Parallel section review** — each chunk reviewed independently with mode-specific prompts and chain-of-thought scaffolding
+5. **Integration pass** — cross-section consistency check, review letter generation
+6. **Manifest post-processing** — deduplication, back-to-front sort, no-op removal, comment anchor resolution
+7. **Apply** — tracked changes (pass 1), fallback comments for failed matches (pass 2)
+
+**Output artifacts:**
+
+| File | Description |
+|------|-------------|
+| `<output>.docx` | Reviewed document with tracked changes and comments |
+| `<output>.review-letter.md` | Markdown review letter (editorial, copy editor, or peer review format) |
+| `<output>.review-summary.json` | Machine-readable summary with stats, token usage, pass details |
+
+**Review-specific flags:**
+
+| Flag | Description |
+|------|-------------|
+| `--review <mode>` | `substantive`, `proofread`, or `peer_review` |
+| `--profile <name>` | `auto`, `general`, `medical`, `regulatory`, `reference`, `legal`, `contract` |
+| `--model <name>` | LLM model (default: `gpt-5.4`) |
+| `--structure-model <name>` | Model for structure analysis (default: `gpt-5.4-mini`) |
+| `--instructions <text>` | Additional reviewer instructions |
+| `--instructions-file <path>` | Load additional instructions from file |
+| `--review-letter <path>` | Custom path for review letter output |
+| `--summary-out <path>` | Custom path for summary JSON output |
+| `--manifest-out <path>` | Save raw post-processed manifest |
+| `--chunk-concurrency <n>` | Parallel chunk workers (default: 4) |
+
+**Environment variables:**
+
+| Variable | Description |
+|----------|-------------|
+| `DOCX_REVIEW_API_KEY` | API key (preferred) |
+| `OPENAI_API_KEY` | Fallback API key |
+| `DOCX_REVIEW_BASE_URL` | API base URL (default: `https://api.openai.com/v1`) |
+| `DOCX_REVIEW_MODEL` | Default review model |
+| `DOCX_REVIEW_STRUCTURE_MODEL` | Default structure analysis model |
+| `DOCX_REVIEW_CHUNK_CONCURRENCY` | Default chunk concurrency |
+
+**API compatibility:** Auto-detects OpenAI Responses API (`/v1/responses`) and falls back to Chat Completions (`/v1/chat/completions`) if the endpoint returns 404. Works with any OpenAI-compatible proxy.
+
 ### Workflow choice (when used with sciClaw)
 
 - For **new clean manuscripts**: write Markdown and run `pandoc manuscript.md -o manuscript.docx`.
 - For **review/revision workflows with visible markup**: use `docx-review` edit manifests and tracked changes.
+- For **automated review**: use `docx-review --review <mode>` for LLM-powered review with tracked changes.
 - `docx-review --create` is best for template-based drafting when you explicitly want a revision trail.
 
 ## JSON Manifest Format
@@ -203,6 +276,8 @@ The `--textconv` driver normalizes documents to readable text:
 | `--author <name>` | Reviewer name for tracked changes (overrides manifest `author`) |
 | `--json` | Output results as JSON (for scripting/pipelines) |
 | `--dry-run` | Validate the manifest without modifying the document |
+| `--review <mode>` | Run automated LLM review (`substantive`, `proofread`, `peer_review`) |
+| `--profile <name>` | Document profile for review (`auto`, `medical`, `regulatory`, etc.) |
 | `--create` | Create new document from bundled NIH template |
 | `--template <path>` | Use custom template instead of built-in NIH template |
 | `--read` | Extract document content (tracked changes, comments, metadata) |
@@ -226,8 +301,8 @@ make help         # Show all targets
 
 ## Exit Codes
 
-- `0` — All changes and comments applied successfully
-- `1` — One or more edits failed (partial success possible)
+- `0` — All changes and comments applied successfully (or review completed/degraded)
+- `1` — One or more edits failed, or review mode failed entirely
 
 ## JSON Output Mode
 
