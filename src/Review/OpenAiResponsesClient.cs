@@ -115,10 +115,11 @@ public sealed class OpenAiResponsesClient : IResponsesClient, IDisposable
                 var rawBody = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
 
                 // Auto-detect: if /responses returns 404, switch to /chat/completions
+                // Only flip once per client instance; retry immediately
                 if (!_useChatCompletions && response.StatusCode == HttpStatusCode.NotFound)
                 {
                     _useChatCompletions = true;
-                    // Retry immediately with chat completions endpoint
+                    attempt--; // don't count this as a retry
                     continue;
                 }
 

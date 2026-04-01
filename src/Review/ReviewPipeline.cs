@@ -89,7 +89,10 @@ public sealed class ReviewPipeline
                 result.Profile = structure.DocumentContext?.InferProfile() ?? DocumentProfile.General;
 
             var chunkStarted = stopwatch.ElapsedMilliseconds;
-            var chunks = SectionChunker.ChunkDocument(reviewText, structure.Sections, options.ReviewMode);
+            var chunkSize = options.ReviewMode == ReviewMode.Proofread
+                ? SectionChunker.ProofreadChunkSize
+                : SectionChunker.DefaultChunkSize;
+            var chunks = SectionChunker.ChunkDocument(reviewText, structure.Sections, options.ReviewMode, chunkSize: chunkSize);
             result.DurationsMs["chunking"] = stopwatch.ElapsedMilliseconds - chunkStarted;
             if (chunks.Count == 0)
                 throw new InvalidOperationException("Chunking produced no review chunks.");
@@ -121,7 +124,7 @@ public sealed class ReviewPipeline
 
             var postProcessStarted = stopwatch.ElapsedMilliseconds;
             var postProcessor = new ManifestPostProcessor(reviewText.Text, chunks, structure.Sections);
-            var postProcessed = postProcessor.Process(engineResult.Suggestions, options.Author ?? "Reviewer");
+            var postProcessed = postProcessor.Process(engineResult.Suggestions, options.Author ?? "Reviewer", options.ReviewMode);
             result.DurationsMs["post_process"] = stopwatch.ElapsedMilliseconds - postProcessStarted;
             result.Warnings.AddRange(postProcessed.Warnings);
 

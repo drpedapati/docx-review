@@ -54,14 +54,16 @@ public sealed class ManifestPostProcessor
 
     public ManifestPostProcessResult Process(
         IReadOnlyList<ReviewSuggestion> suggestions,
-        string? author)
+        string? author,
+        ReviewMode mode = ReviewMode.Substantive)
     {
         ArgumentNullException.ThrowIfNull(suggestions);
 
         var deduped = DeduplicateEdits(suggestions);
         var capped = deduped.Suggestions;
         var droppedByCap = 0;
-        if (capped.Count > MaxTotalEdits)
+        // No edit cap for proofread mode — spelling/grammar fixes are numerous and all valid
+        if (mode != ReviewMode.Proofread && capped.Count > MaxTotalEdits)
         {
             droppedByCap = capped.Count - MaxTotalEdits;
             capped = capped.Take(MaxTotalEdits).ToList();

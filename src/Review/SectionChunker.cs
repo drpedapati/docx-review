@@ -7,6 +7,7 @@ namespace DocxReview.Review;
 public static class SectionChunker
 {
     public const int DefaultChunkSize = 24_000;
+    public const int ProofreadChunkSize = 8_000;
     public const int DefaultChunkOverlap = 600;
     public const int DefaultMaxChunks = 32;
 
