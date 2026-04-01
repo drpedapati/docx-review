@@ -1,0 +1,103 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "sections",
+    "document_context"
+  ],
+  "properties": {
+    "sections": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "heading",
+          "key",
+          "start_phrase",
+          "major"
+        ],
+        "properties": {
+          "heading": {
+            "type": "string"
+          },
+          "key": {
+            "type": "string",
+            "enum": [
+              "abstract",
+              "introduction",
+              "methods",
+              "results",
+              "discussion",
+              "conclusion",
+              "references",
+              "body",
+              "frontmatter"
+            ]
+          },
+          "start_phrase": {
+            "type": "string"
+          },
+          "major": {
+            "type": "boolean"
+          }
+        }
+      }
+    },
+    "document_context": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "document_type",
+        "study_design",
+        "reporting_standard",
+        "discipline",
+        "context_note"
+      ],
+      "properties": {
+        "document_type": {
+          "type": "string",
+          "enum": [
+            "biomedical_manuscript",
+            "clinical_protocol",
+            "regulatory_submission",
+            "grant_proposal",
+            "legal_contract",
+            "technical_report",
+            "general"
+          ]
+        },
+        "study_design": {
+          "type": "string",
+          "enum": [
+            "observational",
+            "rct",
+            "case_control",
+            "cohort",
+            "meta_analysis",
+            "case_report",
+            "n/a"
+          ]
+        },
+        "reporting_standard": {
+          "type": "string",
+          "enum": [
+            "STROBE",
+            "CONSORT",
+            "PRISMA",
+            "SPIRIT",
+            "ARRIVE",
+            "CARE",
+            "n/a"
+          ]
+        },
+        "discipline": {
+          "type": "string"
+        },
+        "context_note": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

@@ -2,13 +2,14 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text.Json;
+using System.Threading.Tasks;
 using DocxReview;
+using DocxReview.Review;
 
 class Program
 {
-    static int Main(string[] args)
+    static async Task<int> Main(string[] args)
     {
-        // Parse arguments
         string? inputPath = null;
         string? manifestPath = null;
         string? outputPath = null;
@@ -21,75 +22,141 @@ class Program
         bool textConvMode = false;
         bool gitSetup = false;
         bool createMode = false;
+        bool reviewMode = false;
         string? templatePath = null;
         bool showHelp = false;
         bool showVersion = false;
         bool acceptExisting = true;
-        var positionalArgs = new List<string>();
 
-        for (int i = 0; i < args.Length; i++)
+        var positionalArgs = new List<string>();
+        var optionValues = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+        var optionFlags = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        try
         {
-            switch (args[i])
+            for (var i = 0; i < args.Length; i++)
             {
-                case "-v":
-                case "--version":
-                    showVersion = true;
-                    break;
-                case "-o":
-                case "--output":
-                    if (i + 1 < args.Length) outputPath = args[++i];
-                    break;
-                case "--author":
-                    if (i + 1 < args.Length) author = args[++i];
-                    break;
-                case "--json":
-                    jsonOutput = true;
-                    break;
-                case "--dry-run":
-                    dryRun = true;
-                    break;
-                case "-i":
-                case "--in-place":
-                    inPlace = true;
-                    break;
-                case "--read":
-                    readMode = true;
-                    break;
-                case "--diff":
-                    diffMode = true;
-                    break;
-                case "--textconv":
-                    textConvMode = true;
-                    break;
-                case "--git-setup":
-                    gitSetup = true;
-                    break;
-                case "--create":
-                    createMode = true;
-                    break;
-                case "--template":
-                    if (i + 1 < args.Length) templatePath = args[++i];
-                    break;
-                case "--accept-existing":
-                    acceptExisting = true;
-                    break;
-                case "--no-accept-existing":
-                    acceptExisting = false;
-                    break;
-                case "-h":
-                case "--help":
-                    showHelp = true;
-                    break;
-                default:
-                    if (!args[i].StartsWith("-"))
+                switch (args[i])
+                {
+                    case "-v":
+                    case "--version":
+                        showVersion = true;
+                        break;
+                    case "-o":
+                    case "--output":
+                        outputPath = RequireValue(args, ref i, args[i]);
+                        optionValues["output"] = outputPath;
+                        break;
+                    case "--author":
+                        author = RequireValue(args, ref i, args[i]);
+                        optionValues["author"] = author;
+                        break;
+                    case "--json":
+                        jsonOutput = true;
+                        optionFlags.Add("json");
+                        break;
+                    case "--dry-run":
+                        dryRun = true;
+                        optionFlags.Add("dry-run");
+                        break;
+                    case "-i":
+                    case "--in-place":
+                        inPlace = true;
+                        optionFlags.Add("in-place");
+                        break;
+                    case "--read":
+                        readMode = true;
+                        break;
+                    case "--diff":
+                        diffMode = true;
+                        break;
+                    case "--textconv":
+                        textConvMode = true;
+                        break;
+                    case "--git-setup":
+                        gitSetup = true;
+                        break;
+                    case "--create":
+                        createMode = true;
+                        break;
+                    case "--review":
+                        reviewMode = true;
+                        optionValues["review"] = RequireValue(args, ref i, args[i]);
+                        break;
+                    case "--profile":
+                        optionValues["profile"] = RequireValue(args, ref i, args[i]);
+                        break;
+                    case "--instructions":
+                        optionValues["instructions"] = RequireValue(args, ref i, args[i]);
+                        break;
+                    case "--instructions-file":
+                        optionValues["instructions-file"] = RequireValue(args, ref i, args[i]);
+                        break;
+                    case "--review-letter":
+                        optionValues["review-letter"] = RequireValue(args, ref i, args[i]);
+                        break;
+                    case "--summary-out":
+                        optionValues["summary-out"] = RequireValue(args, ref i, args[i]);
+                        break;
+                    case "--manifest-out":
+                        optionValues["manifest-out"] = RequireValue(args, ref i, args[i]);
+                        break;
+                    case "--model":
+                        optionValues["model"] = RequireValue(args, ref i, args[i]);
+                        break;
+                    case "--structure-model":
+                        optionValues["structure-model"] = RequireValue(args, ref i, args[i]);
+                        break;
+                    case "--chunk-concurrency":
+                        optionValues["chunk-concurrency"] = RequireValue(args, ref i, args[i]);
+                        break;
+                    case "--template":
+                        templatePath = RequireValue(args, ref i, args[i]);
+                        break;
+                    case "--accept-existing":
+                        acceptExisting = true;
+                        optionFlags.Add("accept-existing");
+                        optionFlags.Remove("no-accept-existing");
+                        break;
+                    case "--no-accept-existing":
+                        acceptExisting = false;
+                        optionFlags.Add("no-accept-existing");
+                        optionFlags.Remove("accept-existing");
+                        break;
+                    case "-h":
+                    case "--help":
+                        showHelp = true;
+                        break;
+                    default:
+                        if (args[i].StartsWith("-", StringComparison.Ordinal))
+                            throw new ArgumentException($"Unknown option: {args[i]}");
+
                         positionalArgs.Add(args[i]);
-                    break;
+                        break;
+                }
             }
         }
+        catch (Exception ex)
+        {
+            Error(ex.Message);
+            return 1;
+        }
 
-        // Map positional args
         if (positionalArgs.Count >= 1) inputPath = positionalArgs[0];
         if (positionalArgs.Count >= 2) manifestPath = positionalArgs[1];
+
+        var selectedModeCount =
+            (readMode ? 1 : 0) +
+            (diffMode ? 1 : 0) +
+            (textConvMode ? 1 : 0) +
+            (createMode ? 1 : 0) +
+            (reviewMode ? 1 : 0);
+
+        if (selectedModeCount > 1)
+        {
+            Error("--read, --diff, --textconv, --create, and --review are mutually exclusive.");
+            return 1;
+        }
 
         if (showVersion)
         {
@@ -97,14 +164,12 @@ class Program
             return 0;
         }
 
-        // ── Git setup ──────────────────────────────────────────────
         if (gitSetup)
         {
             PrintGitSetup();
             return 0;
         }
 
-        // ── Create mode ──────────────────────────────────────────
         if (createMode)
         {
             if (outputPath == null && !dryRun)
@@ -113,7 +178,6 @@ class Program
                 return 1;
             }
 
-            // In create mode, positionalArgs[0] is the manifest (not an input docx)
             string? createManifestPath = positionalArgs.Count >= 1 ? positionalArgs[0] : null;
             EditManifest? createManifest = null;
 
@@ -124,10 +188,11 @@ class Program
                     Error($"Manifest file not found: {createManifestPath}");
                     return 1;
                 }
-                string mJson = File.ReadAllText(createManifestPath);
+
+                var manifestText = File.ReadAllText(createManifestPath);
                 try
                 {
-                    createManifest = JsonSerializer.Deserialize(mJson, DocxReviewJsonContext.Default.EditManifest)
+                    createManifest = JsonSerializer.Deserialize(manifestText, DocxReviewJsonContext.Default.EditManifest)
                         ?? throw new Exception("Manifest deserialized to null");
                 }
                 catch (Exception ex)
@@ -138,12 +203,12 @@ class Program
             }
             else if (Console.IsInputRedirected)
             {
-                string mJson = Console.In.ReadToEnd();
-                if (!string.IsNullOrWhiteSpace(mJson))
+                var manifestText = Console.In.ReadToEnd();
+                if (!string.IsNullOrWhiteSpace(manifestText))
                 {
                     try
                     {
-                        createManifest = JsonSerializer.Deserialize(mJson, DocxReviewJsonContext.Default.EditManifest)
+                        createManifest = JsonSerializer.Deserialize(manifestText, DocxReviewJsonContext.Default.EditManifest)
                             ?? throw new Exception("Manifest deserialized to null");
                     }
                     catch (Exception ex)
@@ -154,12 +219,12 @@ class Program
                 }
             }
 
-            string createAuthor = author ?? createManifest?.Author ?? "Author";
+            var createAuthor = author ?? createManifest?.Author ?? "Author";
 
             try
             {
                 var creator = new DocumentCreator();
-                var createResult = creator.Create(outputPath ?? "", createManifest, createAuthor, templatePath, dryRun);
+                var createResult = creator.Create(outputPath ?? string.Empty, createManifest, createAuthor, templatePath, dryRun);
 
                 if (jsonOutput)
                 {
@@ -169,6 +234,7 @@ class Program
                 {
                     PrintCreateResult(createResult, dryRun);
                 }
+
                 return createResult.Success ? 0 : 1;
             }
             catch (Exception ex)
@@ -184,7 +250,21 @@ class Program
             return showHelp ? 0 : 1;
         }
 
-        // ── Diff mode ─────────────────────────────────────────────
+        if (reviewMode)
+        {
+            try
+            {
+                var reviewOptions = ReviewOptions.Parse(optionValues, optionFlags, positionalArgs);
+                reviewOptions.Validate();
+                return await RunReviewModeAsync(reviewOptions).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                Error(ex.Message);
+                return 1;
+            }
+        }
+
         if (diffMode)
         {
             if (manifestPath == null)
@@ -198,6 +278,7 @@ class Program
                 Error($"Old file not found: {inputPath}");
                 return 1;
             }
+
             if (!File.Exists(manifestPath))
             {
                 Error($"New file not found: {manifestPath}");
@@ -218,6 +299,7 @@ class Program
                 {
                     DocumentDiffer.PrintHumanReadable(diffResult);
                 }
+
                 return 0;
             }
             catch (Exception ex)
@@ -227,7 +309,6 @@ class Program
             }
         }
 
-        // ── TextConv mode ─────────────────────────────────────────
         if (textConvMode)
         {
             if (!File.Exists(inputPath!))
@@ -249,14 +330,12 @@ class Program
             }
         }
 
-        // Validate input file
         if (!File.Exists(inputPath))
         {
             Error($"Input file not found: {inputPath}");
             return 1;
         }
 
-        // ── Read mode ─────────────────────────────────────────────
         if (readMode)
         {
             try
@@ -272,6 +351,7 @@ class Program
                 {
                     DocumentReader.PrintHumanReadable(readResult);
                 }
+
                 return 0;
             }
             catch (Exception ex)
@@ -281,15 +361,12 @@ class Program
             }
         }
 
-        // Validate --in-place conflicts
         if (inPlace && outputPath != null)
         {
             Error("--in-place and --output are mutually exclusive");
             return 1;
         }
 
-        // ── Edit mode (original behavior) ─────────────────────────
-        // Read manifest from file or stdin
         string manifestJson;
         if (manifestPath != null)
         {
@@ -298,6 +375,7 @@ class Program
                 Error($"Manifest file not found: {manifestPath}");
                 return 1;
             }
+
             manifestJson = File.ReadAllText(manifestPath);
         }
         else if (!Console.IsInputRedirected)
@@ -310,22 +388,13 @@ class Program
             manifestJson = Console.In.ReadToEnd();
         }
 
-        // Default output path
         if (outputPath == null && !dryRun)
         {
-            if (inPlace)
-            {
-                outputPath = inputPath;
-            }
-            else
-            {
-                string dir = Path.GetDirectoryName(inputPath) ?? ".";
-                string name = Path.GetFileNameWithoutExtension(inputPath);
-                outputPath = Path.Combine(dir, $"{name}_reviewed.docx");
-            }
+            outputPath = inPlace
+                ? inputPath
+                : ReviewOptions.BuildDefaultOutputPath(inputPath);
         }
 
-        // Deserialize manifest (using source-generated context for trim/AOT safety)
         EditManifest manifest;
         try
         {
@@ -338,16 +407,13 @@ class Program
             return 1;
         }
 
-        // Resolve author (CLI flag > manifest > default)
-        string effectiveAuthor = author ?? manifest.Author ?? "Reviewer";
-
-        // Process
+        var effectiveAuthor = author ?? manifest.Author ?? "Reviewer";
         var editor = new DocumentEditor(effectiveAuthor);
-        ProcessingResult result;
 
+        ProcessingResult result;
         try
         {
-            result = editor.Process(inputPath, outputPath ?? "", manifest, dryRun, acceptExisting);
+            result = editor.Process(inputPath, outputPath ?? string.Empty, manifest, dryRun, acceptExisting);
         }
         catch (Exception ex)
         {
@@ -355,7 +421,6 @@ class Program
             return 1;
         }
 
-        // Output
         if (jsonOutput)
         {
             Console.WriteLine(JsonSerializer.Serialize(result, DocxReviewJsonContext.Default.ProcessingResult));
@@ -368,39 +433,70 @@ class Program
         return result.Success ? 0 : 1;
     }
 
+    static async Task<int> RunReviewModeAsync(ReviewOptions options)
+    {
+        var pipeline = new ReviewPipeline();
+        var result = await pipeline.RunAsync(options).ConfigureAwait(false);
+
+        if (options.JsonOutput)
+        {
+            Console.WriteLine(JsonSerializer.Serialize(result, ReviewJsonContext.Default.ReviewRunResult));
+        }
+        else
+        {
+            PrintHumanReviewResult(result, options.DryRun);
+        }
+
+        return result.Success ? 0 : 1;
+    }
+
     static void PrintUsage()
     {
-        Console.Error.WriteLine(@"docx-review — Read, write, create, and diff Word documents with full revision awareness
+        Console.Error.WriteLine(@"docx-review — Read, write, create, diff, and review Word documents with full revision awareness
 
 Usage:
-  docx-review <input.docx> --read [--json]              Read review state
-  docx-review <input.docx> <edits.json> [options]       Write tracked changes/comments
-  docx-review --create -o <output.docx> [manifest.json]  Create from NIH template
-  docx-review --diff <old.docx> <new.docx> [--json]     Semantic document diff
-  docx-review --textconv <file.docx>                     Git textconv (normalized text)
-  docx-review --git-setup                                Print git configuration
+  docx-review <input.docx> --read [--json]                   Read review state
+  docx-review <input.docx> --review <mode> [options]         Run review pipeline
+  docx-review <input.docx> <edits.json> [options]            Write tracked changes/comments
+  docx-review --create -o <output.docx> [manifest.json]      Create from NIH template
+  docx-review --diff <old.docx> <new.docx> [--json]          Semantic document diff
+  docx-review --textconv <file.docx>                         Git textconv (normalized text)
+  docx-review --git-setup                                    Print git configuration
   cat edits.json | docx-review <input.docx> [options]
 
+Review Options:
+  --review <mode>            substantive | proofread | peer_review
+  --profile <name>           auto | general | medical | regulatory |
+                             reference | legal | contract
+  --instructions <text>      Additional inline instructions for the reviewer
+  --instructions-file <path> Load additional instructions from a file
+  --review-letter <path>     Review letter output path
+  --summary-out <path>       Summary JSON output path
+  --manifest-out <path>      Raw manifest output path
+  --model <name>             Review model (default: DOCX_REVIEW_MODEL or gpt-5.4)
+  --structure-model <name>   Structure analysis model (default: DOCX_REVIEW_STRUCTURE_MODEL or gpt-5.4-mini)
+  --chunk-concurrency <n>    Parallel chunk concurrency
+
 Create Options:
-  --create               Create new document from bundled NIH template
-  --template <path>      Use custom template instead of built-in NIH template
-  -o, --output <path>    Output file path (required for create)
+  --create                   Create new document from bundled NIH template
+  --template <path>          Use custom template instead of built-in NIH template
+  -o, --output <path>        Output file path (required for create)
 
 Diff & Git Integration:
-  --diff                 Compare two documents semantically (text, comments,
-                         tracked changes, formatting, styles, metadata)
-  --textconv             Output normalized text for use as git diff textconv driver
-  --git-setup            Print .gitattributes and .gitconfig setup instructions
+  --diff                     Compare two documents semantically (text, comments,
+                             tracked changes, formatting, styles, metadata)
+  --textconv                 Output normalized text for use as git diff textconv driver
+  --git-setup                Print .gitattributes and .gitconfig setup instructions
 
 Read/Write Options:
-  --read                 Read mode: extract tracked changes, comments, metadata
-  -o, --output <path>    Output file path (default: <input>_reviewed.docx)
-  -i, --in-place         Edit the input file in place (mutually exclusive with -o)
-  --author <name>        Reviewer name (overrides manifest author)
-  --json                 Output results as JSON
-  --dry-run              Validate manifest without modifying
-  --no-accept-existing   Preserve existing tracked changes (default: accept them)
-  -h, --help             Show this help
+  --read                     Read mode: extract tracked changes, comments, metadata
+  -o, --output <path>        Output file path (default: <input>_reviewed.docx)
+  -i, --in-place             Edit the input file in place (mutually exclusive with -o)
+  --author <name>            Reviewer name (overrides manifest author)
+  --json                     Output results as JSON
+  --dry-run                  Validate without modifying the document
+  --no-accept-existing       Preserve existing tracked changes (default: accept them)
+  -h, --help                 Show this help
 
 JSON Manifest Format:
   {
@@ -444,7 +540,7 @@ For two-file comparison outside git:
 
     static void PrintHumanResult(ProcessingResult result, bool dryRun)
     {
-        string mode = dryRun ? "[DRY RUN] " : "";
+        var mode = dryRun ? "[DRY RUN] " : string.Empty;
         Console.WriteLine($"\n{mode}docx-review results");
         Console.WriteLine(new string('─', 50));
         Console.WriteLine($"  Input:    {result.Input}");
@@ -455,22 +551,21 @@ For two-file comparison outside git:
         Console.WriteLine($"  Comments: {result.CommentsSucceeded}/{result.CommentsAttempted}");
         Console.WriteLine();
 
-        foreach (var r in result.Results)
+        foreach (var item in result.Results)
         {
-            string icon = r.Success ? "✓" : "✗";
-            Console.WriteLine($"  {icon} [{r.Type}] {r.Message}");
+            var icon = item.Success ? "✓" : "✗";
+            Console.WriteLine($"  {icon} [{item.Type}] {item.Message}");
         }
 
         Console.WriteLine();
-        if (result.Success)
-            Console.WriteLine(dryRun ? "✅ All edits would succeed" : "✅ All edits applied successfully");
-        else
-            Console.WriteLine("⚠️  Some edits failed (see above)");
+        Console.WriteLine(result.Success
+            ? (dryRun ? "✅ All edits would succeed" : "✅ All edits applied successfully")
+            : "⚠️  Some edits failed (see above)");
     }
 
     static void PrintCreateResult(CreateResult result, bool dryRun)
     {
-        string mode = dryRun ? "[DRY RUN] " : "";
+        var mode = dryRun ? "[DRY RUN] " : string.Empty;
         Console.WriteLine($"\n{mode}docx-review create");
         Console.WriteLine(new string('─', 50));
         Console.WriteLine($"  Template: {result.Template}");
@@ -483,10 +578,10 @@ For two-file comparison outside git:
             Console.WriteLine($"  Comments: {result.CommentsSucceeded}/{result.CommentsAttempted}");
             Console.WriteLine();
 
-            foreach (var r in result.Results)
+            foreach (var item in result.Results)
             {
-                string icon = r.Success ? "✓" : "✗";
-                Console.WriteLine($"  {icon} [{r.Type}] {r.Message}");
+                var icon = item.Success ? "✓" : "✗";
+                Console.WriteLine($"  {icon} [{item.Type}] {item.Message}");
             }
         }
 
@@ -499,11 +594,78 @@ For two-file comparison outside git:
             Console.WriteLine("⚠️  Some populate edits failed (see above)");
     }
 
+    static void PrintHumanReviewResult(ReviewRunResult result, bool dryRun)
+    {
+        var mode = dryRun ? "[DRY RUN] " : string.Empty;
+        Console.WriteLine($"\n{mode}docx-review review");
+        Console.WriteLine(new string('─', 50));
+        Console.WriteLine($"  Input:    {result.Input}");
+        if (!dryRun && !string.IsNullOrWhiteSpace(result.Output))
+            Console.WriteLine($"  Output:   {result.Output}");
+        Console.WriteLine($"  Status:   {result.Status}");
+        Console.WriteLine($"  Mode:     {result.ReviewMode.ToCliString()}");
+        Console.WriteLine($"  Profile:  {result.Profile.ToCliString()}");
+        Console.WriteLine($"  Changes:  {result.ChangesSucceeded}/{result.ChangesAttempted}");
+        Console.WriteLine($"  Comments: {result.CommentsSucceeded}/{result.CommentsAttempted}");
+        if (result.ChangesFailed > 0)
+            Console.WriteLine($"  Failed:   {result.ChangesFailed} tracked changes");
+        if (result.FallbackComments > 0)
+            Console.WriteLine($"  Fallback: {result.FallbackComments} comments");
+        Console.WriteLine($"  Tokens:   {result.TokenUsage.TotalTokens} total");
+        if (result.DocumentContext != null)
+        {
+            Console.WriteLine($"  Type:     {result.DocumentContext.DocumentType}");
+            Console.WriteLine($"  Study:    {result.DocumentContext.StudyDesign}");
+            Console.WriteLine($"  Standard: {result.DocumentContext.ReportingStandard}");
+        }
+
+        if (result.Passes.Count > 0)
+        {
+            Console.WriteLine();
+            foreach (var pass in result.Passes)
+                Console.WriteLine($"  Pass:     {pass.Name} [{pass.Status}]");
+        }
+
+        Console.WriteLine();
+        foreach (var warning in result.Warnings)
+            Console.WriteLine($"  - {warning}");
+
+        foreach (var error in result.Errors)
+            Console.WriteLine($"  - ERROR: {error}");
+
+        if (!string.IsNullOrWhiteSpace(result.SummaryPath))
+        {
+            Console.WriteLine();
+            Console.WriteLine($"  Summary:  {result.SummaryPath}");
+        }
+
+        if (!string.IsNullOrWhiteSpace(result.ManifestPath))
+            Console.WriteLine($"  Manifest: {result.ManifestPath}");
+
+        if (!string.IsNullOrWhiteSpace(result.ReviewLetterPath))
+            Console.WriteLine($"  Letter:   {result.ReviewLetterPath}");
+    }
+
     static string GetVersion()
     {
         var asm = System.Reflection.Assembly.GetExecutingAssembly();
-        var ver = asm.GetName().Version;
-        return ver != null ? $"{ver.Major}.{ver.Minor}.{ver.Build}" : "1.0.0";
+        var version = asm.GetName().Version;
+        return version != null ? $"{version.Major}.{version.Minor}.{version.Build}" : "1.0.0";
+    }
+
+    static void EnsureParentDirectory(string path)
+    {
+        var directory = Path.GetDirectoryName(path);
+        if (!string.IsNullOrWhiteSpace(directory))
+            Directory.CreateDirectory(directory);
+    }
+
+    static string RequireValue(string[] args, ref int index, string optionName)
+    {
+        if (index + 1 >= args.Length || args[index + 1].StartsWith("-", StringComparison.Ordinal))
+            throw new ArgumentException($"Missing value for {optionName}.");
+
+        return args[++index];
     }
 
     static void Error(string msg) => Console.Error.WriteLine($"Error: {msg}");

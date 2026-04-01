@@ -1,0 +1,189 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "cross_chunk_comments",
+    "review_letter"
+  ],
+  "properties": {
+    "cross_chunk_comments": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "anchor",
+          "text",
+          "category"
+        ],
+        "properties": {
+          "anchor": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          },
+          "category": {
+            "type": "string",
+            "enum": [
+              "methodology",
+              "statistics",
+              "claims",
+              "consistency",
+              "reporting",
+              "reproducibility"
+            ]
+          }
+        }
+      }
+    },
+    "review_letter": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "overall_assessment",
+        "key_findings",
+        "recommendation",
+        "major_comments",
+        "minor_comments",
+        "questions_for_authors",
+        "highlights",
+        "concerns",
+        "recommendations"
+      ],
+      "properties": {
+        "overall_assessment": {
+          "type": "string"
+        },
+        "key_findings": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "category",
+              "description",
+              "severity"
+            ],
+            "properties": {
+              "category": {
+                "type": "string"
+              },
+              "description": {
+                "type": "string"
+              },
+              "severity": {
+                "type": ["string", "null"],
+                "enum": [
+                  "high",
+                  "medium",
+                  "low",
+                  null
+                ]
+              }
+            }
+          }
+        },
+        "major_comments": {
+          "type": ["array", "null"],
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "description",
+              "number",
+              "section",
+              "severity"
+            ],
+            "properties": {
+              "number": {
+                "type": ["integer", "null"]
+              },
+              "section": {
+                "type": ["string", "null"]
+              },
+              "description": {
+                "type": "string"
+              },
+              "severity": {
+                "type": ["string", "null"],
+                "enum": [
+                  "high",
+                  "medium",
+                  "low",
+                  null
+                ]
+              }
+            }
+          }
+        },
+        "minor_comments": {
+          "type": ["array", "null"],
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "description",
+              "number",
+              "section",
+              "severity"
+            ],
+            "properties": {
+              "number": {
+                "type": ["integer", "null"]
+              },
+              "section": {
+                "type": ["string", "null"]
+              },
+              "description": {
+                "type": "string"
+              },
+              "severity": {
+                "type": ["string", "null"],
+                "enum": [
+                  "high",
+                  "medium",
+                  "low",
+                  null
+                ]
+              }
+            }
+          }
+        },
+        "questions_for_authors": {
+          "type": ["array", "null"],
+          "items": {
+            "type": "string"
+          }
+        },
+        "recommendation": {
+          "type": "string",
+          "enum": [
+            "accept",
+            "minor_revision",
+            "major_revision",
+            "reject"
+          ]
+        },
+        "highlights": {
+          "type": ["array", "null"],
+          "items": {
+            "type": "string"
+          }
+        },
+        "concerns": {
+          "type": ["array", "null"],
+          "items": {
+            "type": "string"
+          }
+        },
+        "recommendations": {
+          "type": ["array", "null"],
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}

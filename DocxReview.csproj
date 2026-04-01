@@ -24,5 +24,6 @@
     <EmbeddedResource Include="templates/nih-standard.docx">
       <LogicalName>DocxReview.templates.nih-standard.docx</LogicalName>
     </EmbeddedResource>
+    <EmbeddedResource Include="src/Review/Resources/*.json" />
   </ItemGroup>
 </Project>
