@@ -13,7 +13,11 @@
         "type": "object",
         "additionalProperties": false,
         "required": [
-          "type"
+          "type",
+          "find",
+          "replace",
+          "anchor",
+          "insert"
         ],
         "properties": {
           "type": {
@@ -25,16 +29,16 @@
             ]
           },
           "find": {
-            "type": "string"
+            "type": ["string", "null"]
           },
           "replace": {
-            "type": "string"
+            "type": ["string", "null"]
           },
           "anchor": {
-            "type": "string"
+            "type": ["string", "null"]
           },
           "insert": {
-            "type": "string"
+            "type": ["string", "null"]
           }
         }
       }

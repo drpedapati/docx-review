@@ -45,6 +45,7 @@ public sealed class OpenAiResponsesClient : IResponsesClient, IDisposable
     private readonly string _baseUrl;
     private readonly string _apiKey;
     private readonly int _maxRetries;
+    private bool _useChatCompletions; // auto-detected on first 404 from /responses
 
     public OpenAiResponsesClient(string apiKey, string? baseUrl = null, HttpClient? httpClient = null, int maxRetries = 3)
     {
@@ -54,6 +55,7 @@ public sealed class OpenAiResponsesClient : IResponsesClient, IDisposable
         _apiKey = apiKey.Trim();
         _baseUrl = string.IsNullOrWhiteSpace(baseUrl) ? ReviewOptions.DefaultBaseUrl : baseUrl.Trim().TrimEnd('/');
         _maxRetries = maxRetries < 0 ? 0 : maxRetries;
+        _useChatCompletions = false;
 
         if (httpClient is null)
         {
@@ -78,9 +80,6 @@ public sealed class OpenAiResponsesClient : IResponsesClient, IDisposable
         if (string.IsNullOrWhiteSpace(request.Input))
             throw new ArgumentException("Response input is required.", nameof(request));
 
-        var payload = BuildRequestPayload(request);
-        var payloadJson = JsonSerializer.Serialize(payload, ReviewJsonContext.Default.OpenAiApiRequest);
-
         OpenAiResponsesException? lastApiException = null;
         Exception? lastTransportException = null;
 
@@ -88,7 +87,22 @@ public sealed class OpenAiResponsesClient : IResponsesClient, IDisposable
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            using var message = new HttpRequestMessage(HttpMethod.Post, $"{_baseUrl}/responses")
+            string endpoint;
+            string payloadJson;
+
+            if (_useChatCompletions)
+            {
+                endpoint = $"{_baseUrl}/chat/completions";
+                payloadJson = BuildChatCompletionsPayload(request);
+            }
+            else
+            {
+                endpoint = $"{_baseUrl}/responses";
+                var payload = BuildRequestPayload(request);
+                payloadJson = JsonSerializer.Serialize(payload, ReviewJsonContext.Default.OpenAiApiRequest);
+            }
+
+            using var message = new HttpRequestMessage(HttpMethod.Post, endpoint)
             {
                 Content = new StringContent(payloadJson, Encoding.UTF8, "application/json")
             };
@@ -99,6 +113,14 @@ public sealed class OpenAiResponsesClient : IResponsesClient, IDisposable
             {
                 using var response = await _httpClient.SendAsync(message, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
                 var rawBody = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+
+                // Auto-detect: if /responses returns 404, switch to /chat/completions
+                if (!_useChatCompletions && response.StatusCode == HttpStatusCode.NotFound)
+                {
+                    _useChatCompletions = true;
+                    // Retry immediately with chat completions endpoint
+                    continue;
+                }
 
                 if (!response.IsSuccessStatusCode)
                 {
@@ -111,7 +133,7 @@ public sealed class OpenAiResponsesClient : IResponsesClient, IDisposable
                     continue;
                 }
 
-                return ParseSuccessResponse(rawBody);
+                return _useChatCompletions ? ParseChatCompletionsResponse(rawBody) : ParseSuccessResponse(rawBody);
             }
             catch (OpenAiResponsesException)
             {
@@ -142,6 +164,64 @@ public sealed class OpenAiResponsesClient : IResponsesClient, IDisposable
     {
         if (_ownsHttpClient)
             _httpClient.Dispose();
+    }
+
+    private static string BuildChatCompletionsPayload(OpenAiResponseRequest request)
+    {
+        var messages = new List<object>
+        {
+            new Dictionary<string, string> { ["role"] = "user", ["content"] = request.Input }
+        };
+
+        var payload = new Dictionary<string, object>
+        {
+            ["model"] = request.Model.Trim(),
+            ["messages"] = messages
+        };
+
+        if (request.MaxOutputTokens.HasValue)
+            payload["max_tokens"] = request.MaxOutputTokens.Value;
+
+        if (request.JsonSchema is JsonElement schema)
+        {
+            payload["response_format"] = new Dictionary<string, object>
+            {
+                ["type"] = "json_schema",
+                ["json_schema"] = new Dictionary<string, object>
+                {
+                    ["name"] = string.IsNullOrWhiteSpace(request.JsonSchemaName) ? "structured_output" : request.JsonSchemaName!.Trim(),
+                    ["schema"] = schema,
+                    ["strict"] = request.JsonSchemaStrict
+                }
+            };
+        }
+
+        return JsonSerializer.Serialize(payload);
+    }
+
+    private static OpenAiResponseResult ParseChatCompletionsResponse(string rawBody)
+    {
+        using var document = JsonDocument.Parse(rawBody);
+        var root = document.RootElement;
+
+        var outputText = string.Empty;
+        if (root.TryGetProperty("choices", out var choices) && choices.ValueKind == JsonValueKind.Array && choices.GetArrayLength() > 0)
+        {
+            var firstChoice = choices[0];
+            if (firstChoice.TryGetProperty("message", out var msg) && msg.TryGetProperty("content", out var content) && content.ValueKind == JsonValueKind.String)
+                outputText = content.GetString()?.Trim() ?? string.Empty;
+        }
+
+        var usage = ParseUsage(root);
+
+        return new OpenAiResponseResult
+        {
+            Id = root.TryGetProperty("id", out var id) && id.ValueKind == JsonValueKind.String ? id.GetString() : null,
+            Status = "completed",
+            OutputText = outputText,
+            Usage = usage,
+            RawJson = rawBody
+        };
     }
 
     private static OpenAiApiRequest BuildRequestPayload(OpenAiResponseRequest request)
