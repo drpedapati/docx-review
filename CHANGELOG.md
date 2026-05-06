@@ -2,6 +2,19 @@
 
 All notable changes to docx-review are documented here.
 
+## [1.5.1] - 2026-05-06
+
+### Fixed
+- Corrected release metadata so `docx-review --version` reports the packaged release version.
+
+## [1.5.0] - 2026-04-01
+
+### Added
+- `--review` mode for automated LLM document review workflows.
+
+### Fixed
+- Linux CI package restore now uses trusted NuGet signers.
+
 ## [1.4.2] - 2026-03-09
 
 ### Added
