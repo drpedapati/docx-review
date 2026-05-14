@@ -36,11 +36,16 @@ public class DocumentReader
 
         // Extract paragraphs with tracked changes
         int totalWordCount = 0;
+        int currentPage = 1;
         for (int i = 0; i < paragraphs.Count; i++)
         {
             var para = paragraphs[i];
-            var paraInfo = ExtractParagraph(para, i);
+            var paraInfo = ExtractParagraph(para, i, currentPage);
             result.Paragraphs.Add(paraInfo);
+
+            // Advance page counter when this paragraph contains a page break
+            if (ParagraphHasPageBreak(para))
+                currentPage++;
 
             // Count words from visible text
             if (!string.IsNullOrWhiteSpace(paraInfo.Text))
@@ -66,9 +71,9 @@ public class DocumentReader
     /// Extract paragraph text, style, and tracked changes.
     /// The "text" field is the CURRENT visible text (includes insertions, excludes deletions).
     /// </summary>
-    private ParagraphInfo ExtractParagraph(Paragraph para, int index)
+    private ParagraphInfo ExtractParagraph(Paragraph para, int index, int page = 1)
     {
-        var info = new ParagraphInfo { Index = index };
+        var info = new ParagraphInfo { Index = index, Page = page };
 
         // Get paragraph style
         var styleId = para.ParagraphProperties?.ParagraphStyleId?.Val?.Value;
@@ -532,5 +537,35 @@ public class DocumentReader
         if (text.Length > 0)
             lines.Add(text);
         return lines;
+    }
+
+    /// <summary>
+    /// Returns true if the paragraph contains a page break element.
+    /// Used to advance the running page counter in <see cref="Read"/>.
+    /// Detects:
+    ///   - Explicit hard page breaks: w:br[@w:type="page"] inside any run
+    ///   - Word rendered-page hints:  w:lastRenderedPageBreak (w14 namespace)
+    ///     surfaced as an unrecognised child element of a w:r run
+    /// </summary>
+    private static bool ParagraphHasPageBreak(Paragraph para)
+    {
+        foreach (var run in para.Descendants<Run>())
+        {
+            // Explicit hard page break: <w:br w:type="page"/>
+            foreach (var br in run.Elements<Break>())
+            {
+                if (br.Type?.Value == BreakValues.Page)
+                    return true;
+            }
+
+            // w:lastRenderedPageBreak -- Word's soft page-break rendering hint.
+            // Not a typed class in DocumentFormat.OpenXml; matched by local name.
+            foreach (var child in run.ChildElements)
+            {
+                if (child.LocalName == "lastRenderedPageBreak")
+                    return true;
+            }
+        }
+        return false;
     }
 }

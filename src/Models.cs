@@ -170,6 +170,18 @@ public class ParagraphInfo
     [JsonPropertyName("text")]
     public string Text { get; set; } = "";
 
+    /// <summary>
+    /// 1-based page number estimated from page-break markers in the document XML.
+    /// Incremented on w:br[@w:type="page"] (explicit hard page breaks) and on
+    /// w:lastRenderedPageBreak (Word rendered-page hints in the w14 namespace).
+    ///
+    /// NOTE: .docx XML has no reliable pagination API. This is a structural
+    /// estimate from page-break markers only. Authors should verify exact page
+    /// numbers in Microsoft Word or from a PDF rendition before submission.
+    /// </summary>
+    [JsonPropertyName("page")]
+    public int? Page { get; set; }
+
     [JsonPropertyName("tracked_changes")]
     public List<TrackedChangeInfo> TrackedChanges { get; set; } = new();
 }
